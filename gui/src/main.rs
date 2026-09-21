@@ -391,9 +391,18 @@ impl eframe::App for LWCompat {
 
         ui.visuals_mut().panel_fill = BG;
 
-        ui.add_space(14.0);
+        egui::Frame::new()
+            .inner_margin(egui::Margin {
+                left: 24,
+                right: 24,
+                top: 0,
+                bottom: 0,
+            })
+            .show(ui, |ui| {
 
-        // MAIN HERO
+                ui.add_space(14.0);
+
+                // MAIN HERO
         egui::Frame::new()
             .fill(PANEL)
             .stroke(egui::Stroke::new(1.0, BORDER))
@@ -665,31 +674,8 @@ impl eframe::App for LWCompat {
 
         ui.add_space(8.0);
 
-        // FOOTER
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(
-                    "LWCompat v0.2.0-dev"
-                )
-                .size(10.0)
-                .color(egui::Color32::GRAY),
-            );
-
-            ui.with_layout(
-                egui::Layout::right_to_left(
-                    egui::Align::Center
-                ),
-                |ui| {
-                    ui.label(
-                        egui::RichText::new(
-                            "Unofficial community project"
-                        )
-                        .size(10.0)
-                        .color(egui::Color32::GRAY),
-                    );
-                },
-            );
-        });
+        
+            });
     }
 }
 
@@ -699,7 +685,9 @@ fn main() -> eframe::Result {
             egui::ViewportBuilder::default()
                 .with_title("LWCompat")
                 .with_inner_size([1080.0, 760.0])
-                .with_min_inner_size([920.0, 650.0]),
+                .with_min_inner_size([1080.0, 760.0])
+                .with_max_inner_size([1080.0, 760.0])
+                .with_resizable(false),
         ..Default::default()
     };
 
