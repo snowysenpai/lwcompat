@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$HOME/.local/share/lwcompat"
+BIN_DIR="$HOME/.local/bin"
+APPS_DIR="$HOME/.local/share/applications"
+ICONS_DIR="$HOME/.local/share/icons"
+BACKUP_DIR="$APP_DIR/backups"
+
+say() { printf '[LWCompat installer] %s\n' "$*"; }
+fail() { printf '[LWCompat installer] ERROR: %s\n' "$*" >&2; exit 1; }
+
+for cmd in bash python3 flock pgrep pkill; do
+    command -v "$cmd" >/dev/null 2>&1 || fail "Missing required command: $cmd"
+done
+
+find_game_dir() {
+    if [[ -n "${LWCOMPAT_GAME_DIR:-}" && -f "$LWCOMPAT_GAME_DIR/LastWarLauncher.exe" ]]; then
+        printf '%s\n' "$LWCOMPAT_GAME_DIR"
+        return 0
+    fi
+
+    local default="$HOME/Games/LastWar/drive_c/users/steamuser/AppData/Local/FunFly/Last War-Survival Game"
+    if [[ -f "$default/LastWarLauncher.exe" ]]; then
+        printf '%s\n' "$default"
+        return 0
+    fi
+
+    local found
+    found="$(find "$HOME/Games" -type f -name LastWarLauncher.exe -print -quit 2>/dev/null || true)"
+    [[ -n "$found" ]] || return 1
+    dirname "$found"
+}
+
+find_umu() {
+    if [[ -n "${LWCOMPAT_UMU:-}" && -f "$LWCOMPAT_UMU" ]]; then
+        printf '%s\n' "$LWCOMPAT_UMU"
+        return 0
+    fi
+
+    local candidates=(
+        "$HOME/.local/share/faugus-launcher/umu-run"
+        "$HOME/.local/bin/umu-run"
+    )
+
+    local candidate
+    for candidate in "${candidates[@]}"; do
+        if [[ -f "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    if command -v umu-run >/dev/null 2>&1; then
+        command -v umu-run
+        return 0
+    fi
+
+    return 1
+}
+
+find_proton() {
+    if [[ -n "${LWCOMPAT_PROTON:-}" && -d "$LWCOMPAT_PROTON" ]]; then
+        printf '%s\n' "$LWCOMPAT_PROTON"
+        return 0
+    fi
+
+    local exact=(
+        "$HOME/.local/share/Steam/compatibilitytools.d/Proton-GE Latest"
+        "$HOME/.steam/root/compatibilitytools.d/Proton-GE Latest"
+        "$HOME/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d/Proton-GE Latest"
+    )
+
+    local candidate
+    for candidate in "${exact[@]}"; do
+        if [[ -d "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    local found
+    found="$(find \
+        "$HOME/.local/share/Steam/compatibilitytools.d" \
+        "$HOME/.steam/root/compatibilitytools.d" \
+        "$HOME/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d" \
+        -maxdepth 1 -mindepth 1 -type d -name 'Proton-GE*' -print 2>/dev/null \
+        | sort -V | tail -n 1 || true)"
+
+    [[ -n "$found" ]] || return 1
+    printf '%s\n' "$found"
+}
+
+GAME_DIR="$(find_game_dir)" || fail "LastWarLauncher.exe was not found. Install the official PC launcher in Faugus first, or run: LWCOMPAT_GAME_DIR='/path/to/game' ./install.sh"
+PREFIX="${GAME_DIR%%/drive_c/*}"
+UMU="$(find_umu)" || fail "Faugus/UMU launcher was not found. Set LWCOMPAT_UMU=/path/to/umu-run and retry."
+PROTON="$(find_proton)" || fail "GE-Proton was not found. Set LWCOMPAT_PROTON='/path/to/Proton-GE' and retry."
+
+MANIFEST="$GAME_DIR/manifest.json"
+[[ -f "$MANIFEST" ]] || fail "manifest.json was not found in: $GAME_DIR"
+
+say "Game directory : $GAME_DIR"
+say "Wine prefix    : $PREFIX"
+say "UMU            : $UMU"
+say "Proton         : $PROTON"
+
+mkdir -p "$APP_DIR" "$APP_DIR/logs" "$BACKUP_DIR" "$BIN_DIR" "$APPS_DIR" "$ICONS_DIR"
+
+install -m 0755 "$ROOT_DIR/src/lwcompat.sh" "$APP_DIR/lwcompat.sh"
+install -m 0755 "$ROOT_DIR/src/start.sh" "$APP_DIR/start.sh"
+install -m 0755 "$ROOT_DIR/src/bundle_proxy.py" "$APP_DIR/bundle_proxy.py"
+
+if [[ ! -f "$BACKUP_DIR/manifest.json.initial" ]]; then
+    cp -p "$MANIFEST" "$BACKUP_DIR/manifest.json.initial"
+    say "Saved initial manifest backup."
+fi
+
+{
+    printf 'LWCOMPAT_GAME_DIR=%q\n' "$GAME_DIR"
+    printf 'LWCOMPAT_PREFIX=%q\n' "$PREFIX"
+    printf 'LWCOMPAT_UMU=%q\n' "$UMU"
+    printf 'LWCOMPAT_PROTON=%q\n' "$PROTON"
+} > "$APP_DIR/config.sh"
+chmod 0600 "$APP_DIR/config.sh"
+
+ln -sfn "$APP_DIR/start.sh" "$BIN_DIR/lwcompat"
+
+ICON_VALUE="applications-games"
+CUSTOM_ICON="$ICONS_DIR/lastwar-lwcompat.png"
+
+extract_icon_from_exe() {
+    local exe="$1"
+    local tmp
+    tmp="$(mktemp -d)"
+
+    if ! command -v wrestool >/dev/null 2>&1 || ! command -v icotool >/dev/null 2>&1; then
+        rm -rf "$tmp"
+        return 1
+    fi
+
+    if ! wrestool -x -t14 "$exe" > "$tmp/icon.ico" 2>/dev/null; then
+        rm -rf "$tmp"
+        return 1
+    fi
+
+    if [[ ! -s "$tmp/icon.ico" ]]; then
+        rm -rf "$tmp"
+        return 1
+    fi
+
+    mkdir -p "$tmp/png"
+    if ! icotool -x "$tmp/icon.ico" -o "$tmp/png" >/dev/null 2>&1; then
+        rm -rf "$tmp"
+        return 1
+    fi
+
+    local best=""
+    if command -v identify >/dev/null 2>&1; then
+        best="$(identify -format '%w %h %f\n' "$tmp"/png/*.png 2>/dev/null | sort -nr | head -n 1 | awk '{print $3}' || true)"
+    fi
+
+    if [[ -z "$best" ]]; then
+        best="$(find "$tmp/png" -maxdepth 1 -type f -name '*.png' -printf '%s %f\n' 2>/dev/null | sort -nr | head -n 1 | awk '{print $2}' || true)"
+    fi
+
+    if [[ -n "$best" && -f "$tmp/png/$best" ]]; then
+        cp -f "$tmp/png/$best" "$CUSTOM_ICON"
+        rm -rf "$tmp"
+        return 0
+    fi
+
+    rm -rf "$tmp"
+    return 1
+}
+
+if [[ -f "$CUSTOM_ICON" ]]; then
+    ICON_VALUE="$CUSTOM_ICON"
+elif extract_icon_from_exe "$GAME_DIR/LastWarLauncher.exe"; then
+    ICON_VALUE="$CUSTOM_ICON"
+elif [[ -f "$GAME_DIR/Game/LastWar.exe" ]] && extract_icon_from_exe "$GAME_DIR/Game/LastWar.exe"; then
+    ICON_VALUE="$CUSTOM_ICON"
+else
+    say "Could not extract the official game icon; using the system game icon."
+    say "Optional packages: icoutils and ImageMagick."
+fi
+
+cat > "$APPS_DIR/lwcompat.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Last War (LWCompat)
+Comment=Launch Last War: Survival Game through LWCompat
+Exec=$APP_DIR/start.sh
+Icon=$ICON_VALUE
+Terminal=false
+Categories=Game;
+StartupNotify=true
+Keywords=Last War;LWCompat;Game;
+EOF
+chmod 0755 "$APPS_DIR/lwcompat.desktop"
+
+if command -v kbuildsycoca6 >/dev/null 2>&1; then
+    kbuildsycoca6 >/dev/null 2>&1 || true
+elif command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
+fi
+
+say "Installation complete."
+say "Launch from your application menu: Last War (LWCompat)"
+say "Or run: $BIN_DIR/lwcompat"
+say "Logs: $APP_DIR/logs/"
