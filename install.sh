@@ -110,6 +110,15 @@ mkdir -p "$APP_DIR" "$APP_DIR/logs" "$BACKUP_DIR" "$BIN_DIR" "$APPS_DIR" "$ICONS
 install -m 0755 "$ROOT_DIR/src/lwcompat.sh" "$APP_DIR/lwcompat.sh"
 install -m 0755 "$ROOT_DIR/src/start.sh" "$APP_DIR/start.sh"
 install -m 0755 "$ROOT_DIR/src/bundle_proxy.py" "$APP_DIR/bundle_proxy.py"
+install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
+
+if [[ -f "$ROOT_DIR/src/setup_fast_asset_cache.sh" ]]; then
+    install -m 0755         "$ROOT_DIR/src/setup_fast_asset_cache.sh"         "$APP_DIR/setup_fast_asset_cache.sh"
+
+    install -m 0755         "$ROOT_DIR/src/fast_asset_cache.sh"         "$APP_DIR/fast_asset_cache.sh"
+
+    install -m 0644         "$ROOT_DIR/systemd/lwcompat-fast-asset-cache.service"         "$APP_DIR/lwcompat-fast-asset-cache.service"
+fi
 
 if [[ ! -f "$BACKUP_DIR/manifest.json.initial" ]]; then
     cp -p "$MANIFEST" "$BACKUP_DIR/manifest.json.initial"
@@ -125,6 +134,7 @@ fi
 chmod 0600 "$APP_DIR/config.sh"
 
 ln -sfn "$APP_DIR/start.sh" "$BIN_DIR/lwcompat"
+ln -sfn "$APP_DIR/fast_asset_cache_ctl.sh" "$BIN_DIR/lwcompat-fast-cache"
 
 ICON_VALUE="applications-games"
 CUSTOM_ICON="$ICONS_DIR/lastwar-lwcompat.png"
@@ -204,6 +214,74 @@ if command -v kbuildsycoca6 >/dev/null 2>&1; then
 elif command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
 fi
+
+setup_fast_asset_cache() {
+    local asset_target
+    local setup_script
+    local choice
+    local mode
+
+    asset_target="$PREFIX/drive_c/FunFly/Last War-Survival Game/Cache/AssetBundles"
+    setup_script="$ROOT_DIR/src/setup_fast_asset_cache.sh"
+
+    [[ -d "$asset_target" ]] || {
+        say "Fast Asset Cache: AssetBundles directory was not found; skipping."
+        return 0
+    }
+
+    [[ -x "$setup_script" ]] || {
+        say "Fast Asset Cache setup script is not available; skipping."
+        return 0
+    }
+
+    mode="${LWCOMPAT_FAST_CACHE:-ask}"
+
+    case "$mode" in
+        1|yes|true|on|enable|enabled)
+            choice="y"
+            ;;
+        0|no|false|off|disable|disabled)
+            choice="n"
+            ;;
+        ask)
+            if [[ -t 0 && -t 1 ]]; then
+                echo
+                say "Fast Asset Cache can significantly reduce Last War startup time."
+                say "It uses an ext4 casefold image for the large AssetBundles directory."
+                say "Initial setup requires sudo and a one-time asset migration."
+                echo
+                read -r -p "Enable Fast Asset Cache? [Y/n] " choice
+                choice="${choice:-y}"
+            else
+                say "Fast Asset Cache: non-interactive install detected; skipping."
+                say "Enable later with: $APP_DIR/setup_fast_asset_cache.sh"
+                return 0
+            fi
+            ;;
+        *)
+            fail "Invalid LWCOMPAT_FAST_CACHE value: $mode"
+            ;;
+    esac
+
+    case "$choice" in
+        y|Y|yes|YES|Yes)
+            echo
+            say "Configuring Fast Asset Cache..."
+
+            LWCOMPAT_PREFIX="$PREFIX" \
+                "$setup_script"
+
+            say "Fast Asset Cache configured."
+            ;;
+        *)
+            say "Fast Asset Cache skipped."
+            say "You can enable it later with:"
+            say "  LWCOMPAT_PREFIX='$PREFIX' $APP_DIR/setup_fast_asset_cache.sh"
+            ;;
+    esac
+}
+
+setup_fast_asset_cache
 
 say "Installation complete."
 say "Launch from your application menu: Last War (LWCompat)"

@@ -164,6 +164,52 @@ export GAMEID="umu-default"
 export PROTONFIXES_DISABLE=1
 export PROTON_VERB="waitforexitandrun"
 
+# ------------------------------------------------------------
+# Performance / cache tuning
+# ------------------------------------------------------------
+
+CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/lwcompat"
+DXVK_CACHE="$CACHE_ROOT/dxvk"
+NVIDIA_CACHE="$CACHE_ROOT/nvidia"
+MESA_CACHE="$CACHE_ROOT/mesa"
+
+mkdir -p "$DXVK_CACHE" "$NVIDIA_CACHE" "$MESA_CACHE"
+
+# Keep DXVK pipeline/state cache in one persistent location.
+export DXVK_STATE_CACHE_PATH="$DXVK_CACHE"
+export DXVK_SHADER_CACHE_PATH="$DXVK_CACHE"
+
+# Do not check/update Steam Runtime on every game launch.
+# Runtime updates can still be performed manually when desired.
+export UMU_RUNTIME_UPDATE=0
+
+# Avoid unnecessary DXVK log files during normal gameplay.
+export DXVK_LOG_LEVEL="${DXVK_LOG_LEVEL:-none}"
+
+# NVIDIA shader cache.
+# Ignored on systems that do not use the NVIDIA driver.
+export __GL_SHADER_DISK_CACHE=1
+export __GL_SHADER_DISK_CACHE_PATH="$NVIDIA_CACHE"
+
+# Mesa shader cache.
+# Ignored by NVIDIA's proprietary driver.
+export MESA_SHADER_CACHE_DISABLE=false
+export MESA_SHADER_CACHE_DIR="$MESA_CACHE"
+
+# --- LWCompat Fast Asset Cache status ---
+FAST_CACHE_TARGET="$HOME/Games/LastWar/drive_c/FunFly/Last War-Survival Game/Cache/AssetBundles"
+FAST_CACHE_FSTYPE="$(findmnt -n -o FSTYPE -T "$FAST_CACHE_TARGET" 2>/dev/null || true)"
+FAST_CACHE_SOURCE="$(findmnt -n -o SOURCE -T "$FAST_CACHE_TARGET" 2>/dev/null || true)"
+
+if [[ "$FAST_CACHE_FSTYPE" == "ext4" && "$FAST_CACHE_SOURCE" == *"[/AssetBundles]"* ]]; then
+    echo "[LWCompat] Fast Asset Cache: ACTIVE ($FAST_CACHE_SOURCE)"
+else
+    echo "[LWCompat] Fast Asset Cache: INACTIVE (fallback: ${FAST_CACHE_FSTYPE:-unknown})"
+fi
+# --- end Fast Asset Cache status ---
+
+
+
 log "Wine prefix : $WINEPREFIX"
 log "Proton      : $PROTONPATH"
 log "Proxy log   : $PROXY_LOG"

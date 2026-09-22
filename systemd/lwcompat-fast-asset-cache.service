@@ -1,0 +1,15 @@
+[Unit]
+Description=LWCompat Fast Asset Cache
+Documentation=https://github.com/snowysenpai/lwcompat
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/lwcompat-fast-asset-cache start
+ExecStop=/usr/local/libexec/lwcompat-fast-asset-cache stop
+RemainAfterExit=yes
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
