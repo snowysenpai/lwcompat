@@ -196,6 +196,62 @@ export __GL_SHADER_DISK_CACHE_PATH="$NVIDIA_CACHE"
 export MESA_SHADER_CACHE_DISABLE=false
 export MESA_SHADER_CACHE_DIR="$MESA_CACHE"
 
+
+# --- LWCompat overlay settings ---
+SETTINGS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/lwcompat/settings.conf"
+
+LWCOMPAT_FPS=0
+LWCOMPAT_HUD=0
+
+if [[ -r "$SETTINGS_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$SETTINGS_FILE"
+fi
+
+[[ "$LWCOMPAT_FPS" == "1" ]] || LWCOMPAT_FPS=0
+[[ "$LWCOMPAT_HUD" == "1" ]] || LWCOMPAT_HUD=0
+
+if [[ "${LWCOMPAT_DEVELOPER:-0}" == "1" ]]; then
+    # Developer builds intentionally expose maximum DXVK diagnostics.
+    export DXVK_HUD="full"
+    export DXVK_LOG_LEVEL="info"
+
+    echo "[LWCompat] Developer mode : ACTIVE"
+    echo "[LWCompat] DXVK HUD       : FULL"
+else
+    DXVK_HUD_ITEMS=()
+
+    if [[ "$LWCOMPAT_FPS" == "1" ]]; then
+        DXVK_HUD_ITEMS+=("fps")
+    fi
+
+    if [[ "$LWCOMPAT_HUD" == "1" ]]; then
+        DXVK_HUD_ITEMS+=(
+            "devinfo"
+            "frametimes"
+            "gpuload"
+            "memory"
+            "pipelines"
+            "compiler"
+        )
+    fi
+
+    if (( ${#DXVK_HUD_ITEMS[@]} > 0 )); then
+        DXVK_HUD="$(
+            IFS=,
+            echo "${DXVK_HUD_ITEMS[*]}"
+        )"
+
+        export DXVK_HUD
+    else
+        unset DXVK_HUD
+    fi
+
+    echo "[LWCompat] FPS overlay    : $([[ "$LWCOMPAT_FPS" == "1" ]] && echo ON || echo OFF)"
+    echo "[LWCompat] DXVK HUD       : $([[ "$LWCOMPAT_HUD" == "1" ]] && echo ON || echo OFF)"
+fi
+# --- end LWCompat overlay settings ---
+
 # --- LWCompat Fast Asset Cache status ---
 FAST_CACHE_TARGET="$HOME/Games/LastWar/drive_c/FunFly/Last War-Survival Game/Cache/AssetBundles"
 FAST_CACHE_FSTYPE="$(findmnt -n -o FSTYPE -T "$FAST_CACHE_TARGET" 2>/dev/null || true)"

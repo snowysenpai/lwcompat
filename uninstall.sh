@@ -181,6 +181,8 @@ rm -f "$APPS_DIR/lwcompat.desktop"
 rm -f "$ICONS_DIR/lastwar-lwcompat.png"
 rm -f "$BIN_DIR/lwcompat"
 rm -f "$BIN_DIR/lwcompat-fast-cache"
+rm -f "$BIN_DIR/lwcompat-overlay"
+rm -f "$BIN_DIR/lwcompat-overlay"
 rm -f "$BIN_DIR/lwcompat-gui"
 
 #

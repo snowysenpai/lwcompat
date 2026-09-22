@@ -36,6 +36,11 @@ struct LWCompat {
     fast_cache_child: Option<Child>,
     last_fast_cache_refresh: Instant,
 
+    fps_overlay: bool,
+    hud_overlay: bool,
+    overlay_error: bool,
+    last_overlay_refresh: Instant,
+
     logo: Option<egui::TextureHandle>,
 }
 
@@ -58,6 +63,12 @@ impl LWCompat {
             fast_cache_error: false,
             fast_cache_child: None,
             last_fast_cache_refresh:
+                Instant::now() - Duration::from_secs(5),
+
+            fps_overlay: false,
+            hud_overlay: false,
+            overlay_error: false,
+            last_overlay_refresh:
                 Instant::now() - Duration::from_secs(5),
 
             logo: Self::load_logo(ctx),
@@ -87,6 +98,13 @@ impl LWCompat {
         Some(
             Self::app_dir()?
                 .join("fast_asset_cache_ctl.sh"),
+        )
+    }
+
+    fn overlay_ctl() -> Option<PathBuf> {
+        Some(
+            Self::app_dir()?
+                .join("overlay_ctl.sh"),
         )
     }
 
@@ -257,6 +275,78 @@ impl LWCompat {
         }
     }
 
+    fn refresh_overlays(&mut self) {
+        let Some(ctl) = Self::overlay_ctl() else {
+            self.fps_overlay = false;
+            self.hud_overlay = false;
+            self.overlay_error = true;
+            self.last_overlay_refresh = Instant::now();
+            return;
+        };
+
+        if !ctl.exists() {
+            self.fps_overlay = false;
+            self.hud_overlay = false;
+            self.overlay_error = true;
+            self.last_overlay_refresh = Instant::now();
+            return;
+        }
+
+        match Command::new("bash")
+            .arg(ctl)
+            .arg("status")
+            .output()
+        {
+            Ok(output) => {
+                let text =
+                    String::from_utf8_lossy(&output.stdout);
+
+                self.fps_overlay =
+                    text.lines().any(|line| {
+                        line.trim() == "FPS : ON"
+                    });
+
+                self.hud_overlay =
+                    text.lines().any(|line| {
+                        line.trim() == "HUD : ON"
+                    });
+
+                self.overlay_error =
+                    !output.status.success();
+            }
+
+            Err(_) => {
+                self.fps_overlay = false;
+                self.hud_overlay = false;
+                self.overlay_error = true;
+            }
+        }
+
+        self.last_overlay_refresh = Instant::now();
+    }
+
+    fn toggle_overlay(&mut self, target: &str) {
+        if self.running {
+            return;
+        }
+
+        let Some(ctl) = Self::overlay_ctl() else {
+            self.overlay_error = true;
+            return;
+        };
+
+        let result = Command::new("bash")
+            .arg(ctl)
+            .arg(target)
+            .arg("toggle")
+            .output();
+
+        self.overlay_error =
+            !matches!(result, Ok(ref o) if o.status.success());
+
+        self.refresh_overlays();
+    }
+
     fn refresh(&mut self) {
         self.game_found = Self::game_dir()
             .map(|p| p.exists())
@@ -291,6 +381,12 @@ impl LWCompat {
                 >= Duration::from_secs(2)
         {
             self.refresh_fast_cache();
+        }
+
+        if self.last_overlay_refresh.elapsed()
+            >= Duration::from_secs(2)
+        {
+            self.refresh_overlays();
         }
 
         self.last_refresh = Instant::now();
@@ -349,7 +445,13 @@ impl LWCompat {
             return;
         }
 
-        match Command::new("bash").arg(script).spawn() {
+        let mut command = Command::new("bash");
+        command.arg(script);
+
+        #[cfg(feature = "developer")]
+        command.env("LWCOMPAT_DEVELOPER", "1");
+
+        match command.spawn() {
             Ok(_) => self.status = "LAUNCHING".into(),
             Err(_) => self.status = "ERROR".into(),
         }
@@ -599,6 +701,126 @@ impl LWCompat {
 
         if clicked {
             self.toggle_fast_cache();
+        }
+    }
+
+    fn overlay_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+    ) {
+        let controls_enabled = !self.running;
+
+        let fps_color = if self.fps_overlay {
+            GREEN
+        } else {
+            egui::Color32::GRAY
+        };
+
+        let hud_color = if self.hud_overlay {
+            GREEN
+        } else {
+            egui::Color32::GRAY
+        };
+
+        let mut fps_clicked = false;
+        let mut hud_clicked = false;
+
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("OVERLAYS")
+                    .size(10.5)
+                    .strong()
+                    .color(egui::Color32::GRAY),
+            );
+
+            ui.add_space(8.0);
+
+            fps_clicked = ui
+                .add_enabled(
+                    controls_enabled,
+                    egui::Button::new(
+                        egui::RichText::new(
+                            if self.fps_overlay {
+                                "FPS  ON"
+                            } else {
+                                "FPS  OFF"
+                            },
+                        )
+                        .size(10.5)
+                        .strong()
+                        .color(fps_color),
+                    )
+                    .min_size(
+                        egui::vec2(92.0, 28.0),
+                    ),
+                )
+                .clicked();
+
+            hud_clicked = ui
+                .add_enabled(
+                    controls_enabled,
+                    egui::Button::new(
+                        egui::RichText::new(
+                            if self.hud_overlay {
+                                "HUD  ON"
+                            } else {
+                                "HUD  OFF"
+                            },
+                        )
+                        .size(10.5)
+                        .strong()
+                        .color(hud_color),
+                    )
+                    .min_size(
+                        egui::vec2(92.0, 28.0),
+                    ),
+                )
+                .clicked();
+
+            if self.running {
+                ui.label(
+                    egui::RichText::new(
+                        "Available when the game is closed"
+                    )
+                    .size(9.5)
+                    .color(egui::Color32::GRAY),
+                );
+            }
+
+            if self.overlay_error {
+                ui.label(
+                    egui::RichText::new(
+                        "Overlay settings unavailable"
+                    )
+                    .size(9.5)
+                    .color(RED),
+                );
+            }
+
+            #[cfg(feature = "developer")]
+            ui.with_layout(
+                egui::Layout::right_to_left(
+                    egui::Align::Center,
+                ),
+                |ui| {
+                    ui.label(
+                        egui::RichText::new(
+                            "DEVELOPER BUILD"
+                        )
+                        .size(9.5)
+                        .strong()
+                        .color(ORANGE),
+                    );
+                },
+            );
+        });
+
+        if fps_clicked {
+            self.toggle_overlay("fps");
+        }
+
+        if hud_clicked {
+            self.toggle_overlay("hud");
         }
     }
 
@@ -855,6 +1077,9 @@ impl eframe::App for LWCompat {
                         self.logs_ready,
                     );
                 });
+
+                ui.add_space(10.0);
+                self.overlay_controls(ui);
             });
 
         ui.add_space(16.0);

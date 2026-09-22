@@ -115,6 +115,7 @@ install -m 0755 "$ROOT_DIR/src/lwcompat.sh" "$APP_DIR/lwcompat.sh"
 install -m 0755 "$ROOT_DIR/src/start.sh" "$APP_DIR/start.sh"
 install -m 0755 "$ROOT_DIR/src/bundle_proxy.py" "$APP_DIR/bundle_proxy.py"
 install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
+install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 
 if [[ -f "$ROOT_DIR/src/setup_fast_asset_cache.sh" ]]; then
     install -m 0755         "$ROOT_DIR/src/setup_fast_asset_cache.sh"         "$APP_DIR/setup_fast_asset_cache.sh"
@@ -139,6 +140,7 @@ chmod 0600 "$APP_DIR/config.sh"
 
 ln -sfn "$APP_DIR/start.sh" "$BIN_DIR/lwcompat"
 ln -sfn "$APP_DIR/fast_asset_cache_ctl.sh" "$BIN_DIR/lwcompat-fast-cache"
+ln -sfn "$APP_DIR/overlay_ctl.sh" "$BIN_DIR/lwcompat-overlay"
 
 install_gui() {
     local mode
