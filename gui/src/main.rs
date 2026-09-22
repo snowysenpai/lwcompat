@@ -41,6 +41,8 @@ struct LWCompat {
     overlay_error: bool,
     last_overlay_refresh: Instant,
 
+    show_settings: bool,
+
     logo: Option<egui::TextureHandle>,
 }
 
@@ -70,6 +72,8 @@ impl LWCompat {
             overlay_error: false,
             last_overlay_refresh:
                 Instant::now() - Duration::from_secs(5),
+
+            show_settings: false,
 
             logo: Self::load_logo(ctx),
         };
@@ -463,6 +467,34 @@ impl LWCompat {
         }
     }
 
+    fn open_config_dir(&self) {
+        let Some(home) = Self::home() else {
+            return;
+        };
+
+        let dir = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".config"))
+            .join("lwcompat");
+
+        let _ = fs::create_dir_all(&dir);
+        let _ = Command::new("xdg-open").arg(dir).spawn();
+    }
+
+    fn open_project_page(&self) {
+        let _ = Command::new("xdg-open")
+            .arg("https://github.com/snowysenpai/lwcompat")
+            .spawn();
+    }
+
+    fn build_channel() -> &'static str {
+        if cfg!(feature = "developer") {
+            "Developer"
+        } else {
+            "Live"
+        }
+    }
+
     fn status_color(&self) -> egui::Color32 {
         match self.status.as_str() {
             "READY" => GREEN,
@@ -824,6 +856,294 @@ impl LWCompat {
         }
     }
 
+    fn settings_window(
+        &mut self,
+        ctx: &egui::Context,
+    ) {
+        if !self.show_settings {
+            return;
+        }
+
+        let mut open = self.show_settings;
+
+        egui::Window::new("LWCompat Settings")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(500.0)
+            .show(ctx, |ui| {
+                ui.add_space(4.0);
+
+                ui.label(
+                    egui::RichText::new("GAME OVERLAYS")
+                        .size(12.0)
+                        .strong()
+                        .color(egui::Color32::GRAY),
+                );
+
+                ui.add_space(6.0);
+
+                egui::Frame::new()
+                    .fill(PANEL_ALT)
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        BORDER,
+                    ))
+                    .corner_radius(10.0)
+                    .inner_margin(
+                        egui::Margin::same(12),
+                    )
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(
+                                "FPS Counter"
+                            )
+                            .size(13.0)
+                            .strong(),
+                        );
+
+                        ui.label(
+                            egui::RichText::new(
+                                "Displays the DXVK FPS counter in-game."
+                            )
+                            .size(10.5)
+                            .color(
+                                egui::Color32::GRAY
+                            ),
+                        );
+
+                        ui.add_space(7.0);
+
+                        let fps_text =
+                            if self.fps_overlay {
+                                "FPS  ON"
+                            } else {
+                                "FPS  OFF"
+                            };
+
+                        let fps_color =
+                            if self.fps_overlay {
+                                GREEN
+                            } else {
+                                egui::Color32::GRAY
+                            };
+
+                        if ui
+                            .add_enabled(
+                                !self.running,
+                                egui::Button::new(
+                                    egui::RichText::new(
+                                        fps_text
+                                    )
+                                    .strong()
+                                    .color(fps_color),
+                                )
+                                .min_size(
+                                    egui::vec2(
+                                        110.0,
+                                        30.0,
+                                    ),
+                                ),
+                            )
+                            .clicked()
+                        {
+                            self.toggle_overlay("fps");
+                        }
+
+                        ui.add_space(12.0);
+                        ui.separator();
+                        ui.add_space(12.0);
+
+                        ui.label(
+                            egui::RichText::new(
+                                "DXVK HUD"
+                            )
+                            .size(13.0)
+                            .strong(),
+                        );
+
+                        ui.label(
+                            egui::RichText::new(
+                                "Shows GPU load, frametimes, memory, pipelines and shader activity."
+                            )
+                            .size(10.5)
+                            .color(
+                                egui::Color32::GRAY
+                            ),
+                        );
+
+                        ui.add_space(7.0);
+
+                        let hud_text =
+                            if self.hud_overlay {
+                                "HUD  ON"
+                            } else {
+                                "HUD  OFF"
+                            };
+
+                        let hud_color =
+                            if self.hud_overlay {
+                                GREEN
+                            } else {
+                                egui::Color32::GRAY
+                            };
+
+                        if ui
+                            .add_enabled(
+                                !self.running,
+                                egui::Button::new(
+                                    egui::RichText::new(
+                                        hud_text
+                                    )
+                                    .strong()
+                                    .color(hud_color),
+                                )
+                                .min_size(
+                                    egui::vec2(
+                                        110.0,
+                                        30.0,
+                                    ),
+                                ),
+                            )
+                            .clicked()
+                        {
+                            self.toggle_overlay("hud");
+                        }
+
+                        if self.running {
+                            ui.add_space(8.0);
+
+                            ui.label(
+                                egui::RichText::new(
+                                    "Overlay settings can be changed after the game is closed."
+                                )
+                                .size(9.5)
+                                .color(ORANGE),
+                            );
+                        }
+                    });
+
+                ui.add_space(16.0);
+
+                ui.label(
+                    egui::RichText::new("ABOUT")
+                        .size(12.0)
+                        .strong()
+                        .color(egui::Color32::GRAY),
+                );
+
+                ui.add_space(6.0);
+
+                egui::Frame::new()
+                    .fill(PANEL_ALT)
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        BORDER,
+                    ))
+                    .corner_radius(10.0)
+                    .inner_margin(
+                        egui::Margin::same(12),
+                    )
+                    .show(ui, |ui| {
+                        egui::Grid::new(
+                            "lwcompat_about_grid"
+                        )
+                        .num_columns(2)
+                        .spacing([20.0, 7.0])
+                        .show(ui, |ui| {
+                            ui.label("Version");
+                            ui.label(
+                                egui::RichText::new(
+                                    env!(
+                                        "CARGO_PKG_VERSION"
+                                    )
+                                )
+                                .strong(),
+                            );
+                            ui.end_row();
+
+                            ui.label("Build");
+                            ui.label(
+                                egui::RichText::new(
+                                    Self::build_channel()
+                                )
+                                .strong()
+                                .color(
+                                    if cfg!(
+                                        feature = "developer"
+                                    ) {
+                                        ORANGE
+                                    } else {
+                                        GREEN
+                                    },
+                                ),
+                            );
+                            ui.end_row();
+
+                            ui.label("Frontend");
+                            ui.label(
+                                "Rust / egui"
+                            );
+                            ui.end_row();
+
+                            ui.label("Engine");
+                            ui.label(
+                                "Bash + Python"
+                            );
+                            ui.end_row();
+
+                            ui.label("Runtime");
+                            ui.label(
+                                "UMU + GE-Proton"
+                            );
+                            ui.end_row();
+                        });
+
+                        #[cfg(feature = "developer")]
+                        {
+                            ui.add_space(10.0);
+
+                            ui.label(
+                                egui::RichText::new(
+                                    "Developer diagnostics are enabled for game launches from this build."
+                                )
+                                .size(10.0)
+                                .color(ORANGE),
+                            );
+                        }
+                    });
+
+                ui.add_space(14.0);
+
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("Open Config")
+                        .clicked()
+                    {
+                        self.open_config_dir();
+                    }
+
+                    if ui
+                        .button("Open Logs")
+                        .clicked()
+                    {
+                        self.open_logs();
+                    }
+
+                    if ui
+                        .button("GitHub")
+                        .clicked()
+                    {
+                        self.open_project_page();
+                    }
+                });
+
+                ui.add_space(3.0);
+            });
+
+        self.show_settings = open;
+    }
+
     fn log_color(line: &str) -> egui::Color32 {
         let lower = line.to_ascii_lowercase();
 
@@ -1109,6 +1429,10 @@ impl eframe::App for LWCompat {
                     egui::Align::Center
                 ),
                 |ui| {
+                    if ui.button("Settings").clicked() {
+                        self.show_settings = true;
+                    }
+
                     if ui.button("Open Logs").clicked() {
                         self.open_logs();
                     }
@@ -1148,8 +1472,10 @@ impl eframe::App for LWCompat {
 
         ui.add_space(8.0);
 
-        
             });
+
+        let ctx = ui.ctx().clone();
+        self.settings_window(&ctx);
     }
 }
 

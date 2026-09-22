@@ -24,7 +24,9 @@ LWCompat currently:
 - supports an optional casefold-backed **Fast Asset Cache**;
 - creates a desktop menu entry;
 - attempts to extract the official icon locally from installed game files;
-- includes a separate Rust GUI frontend while keeping the working Bash/Python compatibility engine intact.
+- includes a native Rust GUI frontend while keeping the working Bash/Python compatibility engine intact;
+- provides GUI controls for Fast Asset Cache, FPS counter and DXVK HUD;
+- supports separate Live and Developer GUI builds.
 
 It **does not** redistribute Last War binaries, assets, Proton builds, Faugus components, or proprietary game artwork.
 
@@ -32,6 +34,9 @@ It **does not** redistribute Last War binaries, assets, Proton builds, Faugus co
 
 ```text
 Last War (LWCompat)
+        |
+        v
+lwcompat-gui
         |
         v
 start.sh
@@ -80,6 +85,13 @@ Optional, for notifications and automatic icon extraction:
 - `icoutils` (`wrestool`, `icotool`);
 - ImageMagick (`identify`).
 
+Building the native GUI from source additionally requires:
+
+- Rust;
+- Cargo.
+
+The installer can fall back to the script launcher when Cargo and a prebuilt GUI binary are unavailable.
+
 The optional **Fast Asset Cache** additionally uses:
 
 - `rsync`;
@@ -103,13 +115,21 @@ sudo apt install python3 util-linux procps libnotify-bin icoutils imagemagick rs
 
 ## Install
 
-Clone the repository and run:
+Clone the repository and optionally run the dependency/environment preflight first:
 
 ```bash
 git clone https://github.com/snowysenpai/lwcompat.git
 cd lwcompat
 
 chmod +x install.sh uninstall.sh
+./install.sh --check
+```
+
+The check does not install or modify files.
+
+Install normally with:
+
+```bash
 ./install.sh
 ```
 
@@ -133,6 +153,97 @@ After installation, launch **Last War (LWCompat)** from the desktop application 
 ```bash
 ~/.local/bin/lwcompat
 ```
+
+## Native GUI
+
+LWCompat includes a native Rust/egui frontend.
+
+The GUI is intentionally only the frontend. The compatibility engine remains implemented in the existing Bash/Python components.
+
+Current GUI features include:
+
+- game and engine status;
+- Fast Asset Cache status and ON/OFF control;
+- graphical PolicyKit authentication for privileged Fast Cache operations;
+- FPS counter ON/OFF;
+- DXVK HUD ON/OFF;
+- live launcher/bridge logs;
+- Settings / About panel;
+- direct access to logs, configuration and the project page.
+
+FPS and HUD settings are stored per-user in:
+
+```text
+~/.config/lwcompat/settings.conf
+```
+
+They can also be controlled from the terminal:
+
+```bash
+lwcompat-overlay status
+lwcompat-overlay fps on
+lwcompat-overlay fps off
+lwcompat-overlay hud on
+lwcompat-overlay hud off
+```
+
+Overlay settings are applied to the next game launch. GUI overlay controls are disabled while Last War is running.
+
+## Live and Developer builds
+
+LWCompat keeps normal user-facing builds separate from diagnostic developer builds.
+
+### Live build
+
+The normal installer produces a Live GUI build:
+
+```bash
+cargo build --release --manifest-path gui/Cargo.toml
+```
+
+or simply:
+
+```bash
+./install.sh
+```
+
+The Live build uses normal runtime logging and only enables FPS/DXVK HUD elements explicitly selected by the user.
+
+### Developer build
+
+Developer builds are compiled with the Cargo `developer` feature:
+
+```bash
+cd gui
+
+CARGO_TARGET_DIR=target-dev \
+cargo build --release --features developer
+```
+
+Run it directly with:
+
+```bash
+./target-dev/release/lwcompat-gui
+```
+
+Developer builds are clearly identified as `Developer` in the Settings / About panel.
+
+Launching the game from a Developer build passes:
+
+```text
+LWCOMPAT_DEVELOPER=1
+```
+
+to the compatibility engine.
+
+Developer mode currently enables:
+
+```text
+DXVK_HUD=full
+DXVK_LOG_LEVEL=info
+```
+
+The normal installer does **not** install the Developer build. This keeps diagnostic behavior separate from normal Live installations.
 
 ## Custom paths
 
@@ -359,6 +470,8 @@ The normal per-user installation lives under:
 ├── config.sh
 ├── lwcompat.sh
 ├── start.sh
+├── lwcompat-gui
+├── overlay_ctl.sh
 ├── fast_asset_cache.sh
 ├── fast_asset_cache_ctl.sh
 ├── setup_fast_asset_cache.sh
@@ -372,6 +485,8 @@ User commands:
 
 ```text
 ~/.local/bin/lwcompat
+~/.local/bin/lwcompat-gui
+~/.local/bin/lwcompat-overlay
 ~/.local/bin/lwcompat-fast-cache
 ```
 
@@ -518,7 +633,7 @@ To explicitly preserve the cache:
 - The initial official launcher manifest/version bootstrap is not handled by LWCompat yet.
 - Fast Asset Cache currently depends on Linux ext4 casefold, loop mounts, systemd and elevated privileges during setup or state changes.
 - Performance measurements currently come from a limited test environment and need validation across more hardware and distributions.
-- The Rust GUI is still separate from the Bash/Python compatibility engine.
+- The Rust GUI intentionally remains a frontend over the Bash/Python compatibility engine rather than replacing it.
 
 ## Why this exists
 

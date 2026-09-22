@@ -13,11 +13,155 @@ GUI_SOURCE="$ROOT_DIR/gui/target/release/lwcompat-gui"
 DESKTOP_EXEC="$APP_DIR/start.sh"
 
 say() { printf '[LWCompat installer] %s\n' "$*"; }
+warn() { printf '[LWCompat installer] WARNING: %s\n' "$*" >&2; }
 fail() { printf '[LWCompat installer] ERROR: %s\n' "$*" >&2; exit 1; }
 
-for cmd in bash python3 flock pgrep pkill; do
-    command -v "$cmd" >/dev/null 2>&1 || fail "Missing required command: $cmd"
-done
+usage() {
+    cat <<'EOF'
+LWCompat installer
+
+Usage:
+  ./install.sh
+  ./install.sh --check
+  ./install.sh --help
+
+Options:
+  --check   Check dependencies and installation environment only.
+  --help    Show this help.
+EOF
+}
+
+CHECK_ONLY=0
+
+case "${1:-}" in
+    "")
+        ;;
+    --check)
+        CHECK_ONLY=1
+        shift
+        ;;
+    --help|-h)
+        usage
+        exit 0
+        ;;
+    *)
+        usage >&2
+        fail "Unknown option: $1"
+        ;;
+esac
+
+(( $# == 0 )) || fail "Unexpected argument: $1"
+
+MISSING_CORE=()
+MISSING_FAST_CACHE=()
+MISSING_ICON=()
+
+collect_missing() {
+    local array_name="$1"
+    shift
+
+    local cmd
+
+    for cmd in "$@"; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            eval "$array_name+=(\"\$cmd\")"
+        fi
+    done
+}
+
+print_missing() {
+    local label="$1"
+    shift
+
+    if (( $# == 0 )); then
+        say "$label: OK"
+        return
+    fi
+
+    warn "$label: missing command(s): $*"
+}
+
+package_hint_core() {
+    if command -v dnf >/dev/null 2>&1; then
+        say "Fedora dependency hint:"
+        say "  sudo dnf install python3 util-linux procps-ng findutils coreutils"
+    elif command -v apt-get >/dev/null 2>&1; then
+        say "Debian/Ubuntu dependency hint:"
+        say "  sudo apt install python3 util-linux procps findutils coreutils"
+    elif command -v pacman >/dev/null 2>&1; then
+        say "Arch dependency hint:"
+        say "  sudo pacman -S python util-linux procps-ng findutils coreutils"
+    fi
+}
+
+package_hint_fast_cache() {
+    if command -v dnf >/dev/null 2>&1; then
+        say "Fast Cache dependency hint:"
+        say "  sudo dnf install sudo e2fsprogs rsync util-linux systemd"
+    elif command -v apt-get >/dev/null 2>&1; then
+        say "Fast Cache dependency hint:"
+        say "  sudo apt install sudo e2fsprogs rsync util-linux systemd"
+    elif command -v pacman >/dev/null 2>&1; then
+        say "Fast Cache dependency hint:"
+        say "  sudo pacman -S sudo e2fsprogs rsync util-linux systemd"
+    fi
+}
+
+run_preflight() {
+    collect_missing MISSING_CORE \
+        bash python3 flock pgrep pkill find install mktemp
+
+    collect_missing MISSING_FAST_CACHE \
+        sudo mkfs.ext4 chattr lsattr rsync \
+        mount umount mountpoint findmnt systemctl \
+        truncate du df
+
+    collect_missing MISSING_ICON \
+        wrestool icotool identify
+
+    echo
+    say "Running dependency preflight..."
+
+    print_missing "Core runtime" "${MISSING_CORE[@]}"
+
+    if (( ${#MISSING_CORE[@]} > 0 )); then
+        package_hint_core
+        fail "Required core dependencies are missing."
+    fi
+
+    print_missing "Fast Asset Cache" "${MISSING_FAST_CACHE[@]}"
+
+    if (( ${#MISSING_FAST_CACHE[@]} > 0 )); then
+        package_hint_fast_cache
+    fi
+
+    if command -v pkexec >/dev/null 2>&1; then
+        say "Graphical authentication: OK (pkexec)"
+    else
+        warn "Graphical authentication: pkexec not found."
+        warn "Fast Cache can still be controlled from a terminal with sudo."
+    fi
+
+    if command -v cargo >/dev/null 2>&1; then
+        say "Rust GUI build       : OK (cargo)"
+    elif [[ -x "$GUI_SOURCE" ]]; then
+        say "Rust GUI build       : using existing prebuilt binary"
+    else
+        warn "Rust GUI build       : cargo not found"
+        warn "GUI will fall back to the script launcher unless a prebuilt binary is provided."
+    fi
+
+    if (( ${#MISSING_ICON[@]} == 0 )); then
+        say "Icon extraction      : OK"
+    else
+        say "Icon extraction      : optional tools missing (${MISSING_ICON[*]})"
+        say "                       system game icon will be used if needed"
+    fi
+
+    echo
+}
+
+run_preflight
 
 find_game_dir() {
     if [[ -n "${LWCOMPAT_GAME_DIR:-}" && -f "$LWCOMPAT_GAME_DIR/LastWarLauncher.exe" ]]; then
@@ -109,6 +253,13 @@ say "Wine prefix    : $PREFIX"
 say "UMU            : $UMU"
 say "Proton         : $PROTON"
 
+if (( CHECK_ONLY == 1 )); then
+    echo
+    say "Preflight check completed successfully."
+    say "No files were installed or modified."
+    exit 0
+fi
+
 mkdir -p "$APP_DIR" "$APP_DIR/logs" "$BACKUP_DIR" "$BIN_DIR" "$APPS_DIR" "$ICONS_DIR"
 
 install -m 0755 "$ROOT_DIR/src/lwcompat.sh" "$APP_DIR/lwcompat.sh"
@@ -118,11 +269,17 @@ install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cac
 install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 
 if [[ -f "$ROOT_DIR/src/setup_fast_asset_cache.sh" ]]; then
-    install -m 0755         "$ROOT_DIR/src/setup_fast_asset_cache.sh"         "$APP_DIR/setup_fast_asset_cache.sh"
+    install -m 0755 \
+        "$ROOT_DIR/src/setup_fast_asset_cache.sh" \
+        "$APP_DIR/setup_fast_asset_cache.sh"
 
-    install -m 0755         "$ROOT_DIR/src/fast_asset_cache.sh"         "$APP_DIR/fast_asset_cache.sh"
+    install -m 0755 \
+        "$ROOT_DIR/src/fast_asset_cache.sh" \
+        "$APP_DIR/fast_asset_cache.sh"
 
-    install -m 0644         "$ROOT_DIR/systemd/lwcompat-fast-asset-cache.service"         "$APP_DIR/lwcompat-fast-asset-cache.service"
+    install -m 0644 \
+        "$ROOT_DIR/systemd/lwcompat-fast-asset-cache.service" \
+        "$APP_DIR/lwcompat-fast-asset-cache.service"
 fi
 
 if [[ ! -f "$BACKUP_DIR/manifest.json.initial" ]]; then
