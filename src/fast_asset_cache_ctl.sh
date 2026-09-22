@@ -4,6 +4,7 @@ set -euo pipefail
 SERVICE="lwcompat-fast-asset-cache.service"
 CONFIG="/etc/lwcompat/fast-asset-cache.conf"
 HELPER="/usr/local/libexec/lwcompat-fast-asset-cache"
+SYSTEMCTL="$(command -v systemctl)"
 
 say() {
     printf '[LWCompat Fast Cache] %s\n' "$*"
@@ -12,6 +13,35 @@ say() {
 fail() {
     printf '[LWCompat Fast Cache] ERROR: %s\n' "$*" >&2
     exit 1
+}
+
+run_root() {
+    if (( EUID == 0 )); then
+        "$@"
+        return
+    fi
+
+    # GUI actions must always use graphical PolicyKit auth.
+    if [[ "${LWCOMPAT_GUI:-0}" == "1" ]]; then
+        command -v pkexec >/dev/null 2>&1 ||
+            fail "pkexec is required for graphical authentication."
+
+        pkexec "$@"
+        return
+    fi
+
+    # Terminal usage keeps the normal sudo workflow.
+    if [[ -t 0 && -t 1 ]]; then
+        sudo "$@"
+        return
+    fi
+
+    if command -v pkexec >/dev/null 2>&1; then
+        pkexec "$@"
+        return
+    fi
+
+    fail "Root privileges are required and neither sudo nor pkexec is available."
 }
 
 game_running() {
@@ -83,7 +113,7 @@ enable_cache() {
 
     say "Enabling Fast Asset Cache..."
 
-    sudo systemctl enable --now "$SERVICE"
+    run_root "$SYSTEMCTL" enable --now "$SERVICE"
 
     # shellcheck disable=SC1090
     source "$CONFIG"
@@ -109,7 +139,7 @@ disable_cache() {
 
     say "Disabling Fast Asset Cache..."
 
-    sudo systemctl disable --now "$SERVICE"
+    run_root "$SYSTEMCTL" disable --now "$SERVICE"
 
     # shellcheck disable=SC1090
     source "$CONFIG"

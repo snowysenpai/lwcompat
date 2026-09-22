@@ -8,6 +8,10 @@ APPS_DIR="$HOME/.local/share/applications"
 ICONS_DIR="$HOME/.local/share/icons"
 BACKUP_DIR="$APP_DIR/backups"
 
+GUI_INSTALL="$APP_DIR/lwcompat-gui"
+GUI_SOURCE="$ROOT_DIR/gui/target/release/lwcompat-gui"
+DESKTOP_EXEC="$APP_DIR/start.sh"
+
 say() { printf '[LWCompat installer] %s\n' "$*"; }
 fail() { printf '[LWCompat installer] ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -136,6 +140,85 @@ chmod 0600 "$APP_DIR/config.sh"
 ln -sfn "$APP_DIR/start.sh" "$BIN_DIR/lwcompat"
 ln -sfn "$APP_DIR/fast_asset_cache_ctl.sh" "$BIN_DIR/lwcompat-fast-cache"
 
+install_gui() {
+    local mode
+    local choice
+
+    mode="${LWCOMPAT_GUI:-ask}"
+
+    case "$mode" in
+        1|yes|true|on|enable|enabled)
+            choice="y"
+            ;;
+        0|no|false|off|disable|disabled)
+            choice="n"
+            ;;
+        ask)
+            if [[ -t 0 && -t 1 ]]; then
+                echo
+                say "LWCompat includes an optional native Rust GUI."
+                say "The GUI uses the existing Bash/Python compatibility engine."
+                echo
+                read -r -p "Build and install the LWCompat GUI? [Y/n] " choice
+                choice="${choice:-y}"
+            else
+                choice="n"
+            fi
+            ;;
+        *)
+            fail "Invalid LWCOMPAT_GUI value: $mode"
+            ;;
+    esac
+
+    case "$choice" in
+        y|Y|yes|YES|Yes)
+            if [[ ! -f "$ROOT_DIR/gui/Cargo.toml" ]]; then
+                say "GUI source was not found; using launcher fallback."
+                return 0
+            fi
+
+            if command -v cargo >/dev/null 2>&1; then
+                echo
+                say "Building LWCompat GUI..."
+
+                if ! cargo build \
+                    --release \
+                    --manifest-path "$ROOT_DIR/gui/Cargo.toml"
+                then
+                    say "GUI build failed; continuing with launcher fallback."
+                    return 0
+                fi
+            elif [[ ! -x "$GUI_SOURCE" ]]; then
+                say "Cargo was not found and no prebuilt GUI binary is available."
+                say "Continuing with launcher fallback."
+                return 0
+            fi
+
+            if [[ ! -x "$GUI_SOURCE" ]]; then
+                say "GUI binary was not produced; using launcher fallback."
+                return 0
+            fi
+
+            install -m 0755 "$GUI_SOURCE" "$GUI_INSTALL"
+            ln -sfn "$GUI_INSTALL" "$BIN_DIR/lwcompat-gui"
+
+            DESKTOP_EXEC="$GUI_INSTALL"
+
+            say "LWCompat GUI installed."
+            ;;
+        *)
+            rm -f "$BIN_DIR/lwcompat-gui"
+            rm -f "$GUI_INSTALL"
+
+            DESKTOP_EXEC="$APP_DIR/start.sh"
+
+            say "GUI skipped; desktop entry will launch the compatibility engine directly."
+            ;;
+    esac
+}
+
+install_gui
+
 ICON_VALUE="applications-games"
 CUSTOM_ICON="$ICONS_DIR/lastwar-lwcompat.png"
 
@@ -200,7 +283,7 @@ cat > "$APPS_DIR/lwcompat.desktop" <<EOF
 Type=Application
 Name=Last War (LWCompat)
 Comment=Launch Last War: Survival Game through LWCompat
-Exec=$APP_DIR/start.sh
+Exec=$DESKTOP_EXEC
 Icon=$ICON_VALUE
 Terminal=false
 Categories=Game;

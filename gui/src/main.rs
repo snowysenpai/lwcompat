@@ -2,7 +2,7 @@ use eframe::egui;
 use std::{
     fs,
     path::PathBuf,
-    process::Command,
+    process::{Child, Command},
     time::{Duration, Instant},
 };
 
@@ -28,6 +28,14 @@ struct LWCompat {
     logs_ready: bool,
     running: bool,
 
+    fast_cache_installed: bool,
+    fast_cache_enabled: bool,
+    fast_cache_active: bool,
+    fast_cache_busy: bool,
+    fast_cache_error: bool,
+    fast_cache_child: Option<Child>,
+    last_fast_cache_refresh: Instant,
+
     logo: Option<egui::TextureHandle>,
 }
 
@@ -42,6 +50,15 @@ impl LWCompat {
             engine_ready: false,
             logs_ready: false,
             running: false,
+
+            fast_cache_installed: false,
+            fast_cache_enabled: false,
+            fast_cache_active: false,
+            fast_cache_busy: false,
+            fast_cache_error: false,
+            fast_cache_child: None,
+            last_fast_cache_refresh:
+                Instant::now() - Duration::from_secs(5),
 
             logo: Self::load_logo(ctx),
         };
@@ -64,6 +81,13 @@ impl LWCompat {
 
     fn start_script() -> Option<PathBuf> {
         Some(Self::app_dir()?.join("start.sh"))
+    }
+
+    fn fast_cache_ctl() -> Option<PathBuf> {
+        Some(
+            Self::app_dir()?
+                .join("fast_asset_cache_ctl.sh"),
+        )
     }
 
     fn game_dir() -> Option<PathBuf> {
@@ -116,6 +140,123 @@ impl LWCompat {
             .unwrap_or(false)
     }
 
+    fn refresh_fast_cache(&mut self) {
+        let Some(ctl) = Self::fast_cache_ctl() else {
+            self.fast_cache_installed = false;
+            self.fast_cache_enabled = false;
+            self.fast_cache_active = false;
+            self.last_fast_cache_refresh = Instant::now();
+            return;
+        };
+
+        if !ctl.exists() {
+            self.fast_cache_installed = false;
+            self.fast_cache_enabled = false;
+            self.fast_cache_active = false;
+            self.last_fast_cache_refresh = Instant::now();
+            return;
+        }
+
+        match Command::new("bash")
+            .arg(ctl)
+            .arg("status")
+            .output()
+        {
+            Ok(output) => {
+                let text =
+                    String::from_utf8_lossy(&output.stdout);
+
+                self.fast_cache_installed =
+                    output.status.success()
+                    && !text.contains("NOT INSTALLED");
+
+                self.fast_cache_enabled =
+                    text.lines().any(|line| {
+                        line.trim() == "Enabled : yes"
+                    });
+
+                self.fast_cache_active =
+                    text.lines().any(|line| {
+                        line.trim() == "Status  : ACTIVE"
+                    });
+
+                if !output.status.success() {
+                    self.fast_cache_error = true;
+                } else if !self.fast_cache_busy {
+                    self.fast_cache_error = false;
+                }
+            }
+
+            Err(_) => {
+                self.fast_cache_installed = false;
+                self.fast_cache_enabled = false;
+                self.fast_cache_active = false;
+                self.fast_cache_error = true;
+            }
+        }
+
+        self.last_fast_cache_refresh = Instant::now();
+    }
+
+    fn toggle_fast_cache(&mut self) {
+        if self.running
+            || self.fast_cache_busy
+            || !self.fast_cache_installed
+        {
+            return;
+        }
+
+        let Some(ctl) = Self::fast_cache_ctl() else {
+            self.fast_cache_error = true;
+            return;
+        };
+
+        let action = if self.fast_cache_active {
+            "disable"
+        } else {
+            "enable"
+        };
+
+        match Command::new("bash")
+            .arg(ctl)
+            .arg(action)
+            .env("LWCOMPAT_GUI", "1")
+            .spawn()
+        {
+            Ok(child) => {
+                self.fast_cache_child = Some(child);
+                self.fast_cache_busy = true;
+                self.fast_cache_error = false;
+            }
+
+            Err(_) => {
+                self.fast_cache_error = true;
+            }
+        }
+    }
+
+    fn poll_fast_cache_action(&mut self) {
+        let finished =
+            match self.fast_cache_child.as_mut() {
+                Some(child) => match child.try_wait() {
+                    Ok(Some(status)) => {
+                        Some(status.success())
+                    }
+                    Ok(None) => None,
+                    Err(_) => Some(false),
+                },
+                None => None,
+            };
+
+        if let Some(success) = finished {
+            self.fast_cache_child = None;
+            self.fast_cache_busy = false;
+            self.fast_cache_error = !success;
+
+            self.refresh_fast_cache();
+        }
+    }
+
     fn refresh(&mut self) {
         self.game_found = Self::game_dir()
             .map(|p| p.exists())
@@ -144,6 +285,14 @@ impl LWCompat {
         }
 
         self.logs = Self::read_logs();
+
+        if !self.fast_cache_busy
+            && self.last_fast_cache_refresh.elapsed()
+                >= Duration::from_secs(2)
+        {
+            self.refresh_fast_cache();
+        }
+
         self.last_refresh = Instant::now();
     }
 
@@ -349,6 +498,110 @@ impl LWCompat {
             });
     }
 
+    fn fast_cache_card(
+        &mut self,
+        ui: &mut egui::Ui,
+    ) {
+        let (color, ok, value) =
+            if self.fast_cache_busy {
+                (ORANGE, false, "Authorization...")
+            } else if self.fast_cache_error {
+                (RED, false, "Action failed")
+            } else if self.fast_cache_active {
+                (GREEN, true, "ext4 + casefold")
+            } else if self.fast_cache_installed {
+                (ORANGE, false, "Btrfs fallback")
+            } else {
+                (RED, false, "Not installed")
+            };
+
+        let button_text =
+            if self.fast_cache_busy {
+                "..."
+            } else if !self.fast_cache_installed {
+                "N/A"
+            } else if self.fast_cache_active {
+                "ON"
+            } else {
+                "OFF"
+            };
+
+        let button_enabled =
+            self.fast_cache_installed
+            && !self.running
+            && !self.fast_cache_busy;
+
+        let mut clicked = false;
+
+        egui::Frame::new()
+            .fill(PANEL_ALT)
+            .stroke(egui::Stroke::new(1.0, BORDER))
+            .corner_radius(10.0)
+            .inner_margin(egui::Margin::same(12))
+            .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+
+                ui.horizontal(|ui| {
+                    Self::status_icon(
+                        ui,
+                        color,
+                        ok,
+                    );
+
+                    ui.add_space(4.0);
+
+                    ui.vertical(|ui| {
+                        ui.label(
+                            egui::RichText::new(
+                                "Fast Cache"
+                            )
+                            .size(13.0)
+                            .strong(),
+                        );
+
+                        ui.label(
+                            egui::RichText::new(value)
+                                .size(10.5)
+                                .color(
+                                    egui::Color32::GRAY
+                                ),
+                        );
+                    });
+
+                    ui.with_layout(
+                        egui::Layout::right_to_left(
+                            egui::Align::Center,
+                        ),
+                        |ui| {
+                            let response =
+                                ui.add_enabled(
+                                    button_enabled,
+                                    egui::Button::new(
+                                        egui::RichText::new(
+                                            button_text
+                                        )
+                                        .size(10.5)
+                                        .strong(),
+                                    )
+                                    .min_size(
+                                        egui::vec2(
+                                            46.0,
+                                            28.0,
+                                        ),
+                                    ),
+                                );
+
+                            clicked = response.clicked();
+                        },
+                    );
+                });
+            });
+
+        if clicked {
+            self.toggle_fast_cache();
+        }
+    }
+
     fn log_color(line: &str) -> egui::Color32 {
         let lower = line.to_ascii_lowercase();
 
@@ -366,6 +619,7 @@ impl LWCompat {
             || line.contains("READY")
             || line.contains("18080 OK")
             || line.contains("18081 OK")
+            || line.contains("Fast Asset Cache: ACTIVE")
         {
             GREEN
         } else if line.starts_with("──") {
@@ -382,6 +636,8 @@ impl eframe::App for LWCompat {
         ui: &mut egui::Ui,
         _frame: &mut eframe::Frame,
     ) {
+        self.poll_fast_cache_action();
+
         if self.last_refresh.elapsed() >= Duration::from_millis(500) {
             self.refresh();
         }
@@ -584,15 +840,8 @@ impl eframe::App for LWCompat {
                         self.engine_ready,
                     );
 
-                    Self::status_card(
+                    self.fast_cache_card(
                         &mut cards[2],
-                        "Launcher",
-                        if self.engine_ready {
-                            "Ready"
-                        } else {
-                            "Unavailable"
-                        },
-                        self.engine_ready,
                     );
 
                     Self::status_card(
