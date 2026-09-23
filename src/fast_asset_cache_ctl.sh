@@ -155,6 +155,25 @@ disable_cache() {
     show_status
 }
 
+refresh_cache() {
+    require_installation
+
+    if game_running; then
+        fail "Last War is running. Close the game before refreshing Fast Asset Cache."
+    fi
+
+    if systemctl is-active --quiet "$SERVICE"; then
+        fail "Fast Asset Cache is active. Disable it before refreshing."
+    fi
+
+    say "Refreshing Fast Asset Cache..."
+
+    run_root "$HELPER" refresh
+
+    say "Fast Asset Cache refreshed."
+    show_status
+}
+
 case "${1:-status}" in
     status)
         show_status
@@ -164,6 +183,9 @@ case "${1:-status}" in
         ;;
     disable|off)
         disable_cache
+        ;;
+    refresh|sync)
+        refresh_cache
         ;;
     toggle)
         require_installation
@@ -175,7 +197,7 @@ case "${1:-status}" in
         fi
         ;;
     *)
-        echo "Usage: lwcompat-fast-cache {status|enable|disable|toggle}" >&2
+        echo "Usage: lwcompat-fast-cache {status|enable|disable|refresh|toggle}" >&2
         exit 2
         ;;
 esac

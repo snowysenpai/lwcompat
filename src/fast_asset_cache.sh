@@ -76,6 +76,51 @@ stop_cache() {
     log "Fast Asset Cache stopped. Original Btrfs cache is visible."
 }
 
+sync_cache() {
+    [[ -f "$FAST_IMG" ]] || die "Image not found: $FAST_IMG"
+    [[ -d "$TARGET" ]] || die "AssetBundles target not found: $TARGET"
+
+    if mountpoint -q "$TARGET"; then
+        die "Fast Asset Cache must be disabled before refresh."
+    fi
+
+    mkdir -p "$MNT"
+
+    local mounted_here=0
+    local rc=0
+
+    if ! mountpoint -q "$MNT"; then
+        log "Mounting ext4 image for refresh..."
+        mount -o loop,noatime "$FAST_IMG" "$MNT"
+        mounted_here=1
+    fi
+
+    [[ -d "$MNT/AssetBundles" ]] ||
+        die "AssetBundles directory missing inside image."
+
+    log "Refreshing Fast Asset Cache from updated game data..."
+
+    rsync \
+        -a \
+        --delete \
+        --info=stats2 \
+        "$TARGET/" \
+        "$MNT/AssetBundles/" || rc=$?
+
+    sync
+
+    if (( mounted_here == 1 )); then
+        log "Unmounting ext4 image..."
+        umount "$MNT" || rc=$?
+    fi
+
+    if (( rc != 0 )); then
+        die "Fast Asset Cache refresh failed."
+    fi
+
+    log "Fast Asset Cache refresh completed."
+}
+
 status_cache() {
     echo "=== LWCompat Fast Asset Cache ==="
     echo "Image : $FAST_IMG"
@@ -106,8 +151,11 @@ case "${1:-status}" in
     status)
         status_cache
         ;;
+    sync|refresh)
+        sync_cache
+        ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status}" >&2
+        echo "Usage: $0 {start|stop|restart|status|refresh}" >&2
         exit 2
         ;;
 esac

@@ -314,6 +314,7 @@ install -m 0755 "$ROOT_DIR/src/bundle_proxy.py" "$APP_DIR/bundle_proxy.py"
 install -m 0755 "$ROOT_DIR/src/connect_proxy.py" "$APP_DIR/connect_proxy.py"
 install -m 0755 "$ROOT_DIR/src/bootstrap_client.py" "$APP_DIR/bootstrap_client.py"
 install -m 0755 "$ROOT_DIR/src/bootstrap.sh" "$APP_DIR/bootstrap.sh"
+install -m 0755 "$ROOT_DIR/src/update.sh" "$APP_DIR/update.sh"
 install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
 install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 
@@ -347,6 +348,7 @@ chmod 0600 "$APP_DIR/config.sh"
 ln -sfn "$APP_DIR/start.sh" "$BIN_DIR/lwcompat"
 ln -sfn "$APP_DIR/fast_asset_cache_ctl.sh" "$BIN_DIR/lwcompat-fast-cache"
 ln -sfn "$APP_DIR/overlay_ctl.sh" "$BIN_DIR/lwcompat-overlay"
+ln -sfn "$APP_DIR/update.sh" "$BIN_DIR/lwcompat-update"
 
 install_gui() {
     local mode
