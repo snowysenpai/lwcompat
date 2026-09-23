@@ -240,10 +240,56 @@ find_proton() {
     printf '%s\n' "$found"
 }
 
-GAME_DIR="$(find_game_dir)" || fail "LastWarLauncher.exe was not found. Install the official PC launcher in Faugus first, or run: LWCOMPAT_GAME_DIR='/path/to/game' ./install.sh"
-PREFIX="${GAME_DIR%%/drive_c/*}"
 UMU="$(find_umu)" || fail "Faugus/UMU launcher was not found. Set LWCOMPAT_UMU=/path/to/umu-run and retry."
 PROTON="$(find_proton)" || fail "GE-Proton was not found. Set LWCOMPAT_PROTON='/path/to/Proton-GE' and retry."
+
+BOOTSTRAP_PREFIX="${LWCOMPAT_PREFIX:-$HOME/Games/LastWar}"
+BOOTSTRAP_GAME_DIR="$BOOTSTRAP_PREFIX/drive_c/users/steamuser/AppData/Local/FunFly/Last War-Survival Game"
+
+GAME_DIR=""
+
+if [[ "${LWCOMPAT_BOOTSTRAP_FORCE:-0}" != "1" ]]; then
+    GAME_DIR="$(find_game_dir || true)"
+fi
+
+if [[ -z "$GAME_DIR" ]]; then
+    if (( CHECK_ONLY == 1 )); then
+        echo
+        say "Game installation : NOT FOUND"
+        say "Fresh bootstrap   : AVAILABLE"
+        say "Bootstrap prefix  : $BOOTSTRAP_PREFIX"
+        say "UMU               : $UMU"
+        say "Proton            : $PROTON"
+        echo
+        say "Preflight check completed successfully."
+        say "No files were installed or modified."
+        exit 0
+    fi
+
+    echo
+    say "No usable Last War installation was selected."
+    say "Starting LWCompat fresh bootstrap..."
+    say "Bootstrap prefix: $BOOTSTRAP_PREFIX"
+    echo
+
+    LWCOMPAT_PREFIX="$BOOTSTRAP_PREFIX" \
+    LWCOMPAT_UMU="$UMU" \
+    LWCOMPAT_PROTON="$PROTON" \
+        "$ROOT_DIR/src/bootstrap.sh"
+
+    if [[ -f "$BOOTSTRAP_GAME_DIR/LastWarLauncher.exe" &&
+          -f "$BOOTSTRAP_GAME_DIR/manifest.json" &&
+          -f "$BOOTSTRAP_GAME_DIR/Game/LastWar.exe" ]]; then
+        GAME_DIR="$BOOTSTRAP_GAME_DIR"
+    else
+        GAME_DIR="$(find_game_dir || true)"
+    fi
+
+    [[ -n "$GAME_DIR" ]] ||
+        fail "Fresh bootstrap finished, but the Last War installation could not be found."
+fi
+
+PREFIX="${GAME_DIR%%/drive_c/*}"
 
 MANIFEST="$GAME_DIR/manifest.json"
 [[ -f "$MANIFEST" ]] || fail "manifest.json was not found in: $GAME_DIR"
@@ -265,6 +311,9 @@ mkdir -p "$APP_DIR" "$APP_DIR/logs" "$BACKUP_DIR" "$BIN_DIR" "$APPS_DIR" "$ICONS
 install -m 0755 "$ROOT_DIR/src/lwcompat.sh" "$APP_DIR/lwcompat.sh"
 install -m 0755 "$ROOT_DIR/src/start.sh" "$APP_DIR/start.sh"
 install -m 0755 "$ROOT_DIR/src/bundle_proxy.py" "$APP_DIR/bundle_proxy.py"
+install -m 0755 "$ROOT_DIR/src/connect_proxy.py" "$APP_DIR/connect_proxy.py"
+install -m 0755 "$ROOT_DIR/src/bootstrap_client.py" "$APP_DIR/bootstrap_client.py"
+install -m 0755 "$ROOT_DIR/src/bootstrap.sh" "$APP_DIR/bootstrap.sh"
 install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
 install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 

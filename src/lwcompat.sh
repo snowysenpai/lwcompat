@@ -253,7 +253,7 @@ fi
 # --- end LWCompat overlay settings ---
 
 # --- LWCompat Fast Asset Cache status ---
-FAST_CACHE_TARGET="$HOME/Games/LastWar/drive_c/FunFly/Last War-Survival Game/Cache/AssetBundles"
+FAST_CACHE_TARGET="$PREFIX/drive_c/FunFly/Last War-Survival Game/Cache/AssetBundles"
 FAST_CACHE_FSTYPE="$(findmnt -n -o FSTYPE -T "$FAST_CACHE_TARGET" 2>/dev/null || true)"
 FAST_CACHE_SOURCE="$(findmnt -n -o SOURCE -T "$FAST_CACHE_TARGET" 2>/dev/null || true)"
 
@@ -270,6 +270,12 @@ log "Wine prefix : $WINEPREFIX"
 log "Proton      : $PROTONPATH"
 log "Proxy log   : $PROXY_LOG"
 log "Launching Last War..."
+
+# The HTTPS CONNECT proxy is bootstrap-only. Never allow proxy variables
+# from the parent shell or bootstrap session to leak into normal gameplay.
+unset HTTPS_PROXY https_proxy
+unset HTTP_PROXY http_proxy
+unset ALL_PROXY all_proxy
 
 echo
 python3 "$UMU" "$EXE" &

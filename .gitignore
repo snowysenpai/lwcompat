@@ -1,1 +1,4 @@
 /gui/target/
+/gui/target-dev/
+__pycache__/
+*.pyc
