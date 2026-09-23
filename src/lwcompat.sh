@@ -5,6 +5,9 @@ APP_DIR="${LWCOMPAT_APP_DIR:-$HOME/.local/share/lwcompat}"
 CONFIG="$APP_DIR/config.sh"
 LOG_DIR="$APP_DIR/logs"
 UPDATE="$APP_DIR/update.sh"
+CONNECT_PROXY="$APP_DIR/connect_proxy.py"
+CONNECT_LOG="$LOG_DIR/connect.log"
+CONNECT_PID=""
 
 mkdir -p "$LOG_DIR"
 
@@ -187,12 +190,117 @@ unset HTTP_PROXY http_proxy
 unset ALL_PROXY all_proxy
 unset NO_PROXY no_proxy
 
+wait_connect_port() {
+    python3 - <<'PY2'
+import socket
+import time
+
+for _ in range(100):
+    try:
+        with socket.create_connection(
+            ("127.0.0.1", 18083),
+            timeout=0.2,
+        ):
+            raise SystemExit(0)
+    except OSError:
+        time.sleep(0.1)
+
+raise SystemExit(1)
+PY2
+}
+
+
+stop_connect_proxy() {
+    if [[ -n "${CONNECT_PID:-}" ]] &&
+       kill -0 "$CONNECT_PID" 2>/dev/null
+    then
+        kill "$CONNECT_PID" 2>/dev/null || true
+
+        for _ in {1..30}; do
+            kill -0 "$CONNECT_PID" 2>/dev/null || break
+            sleep 0.1
+        done
+
+        kill -9 "$CONNECT_PID" 2>/dev/null || true
+    fi
+
+    CONNECT_PID=""
+
+    # Only kill LWCompat's installed launcher bridge.
+    pkill -f "$APP_DIR/connect_proxy.py" 2>/dev/null || true
+}
+
+
+start_connect_proxy() {
+    stop_connect_proxy
+
+    [[ -f "$CONNECT_PROXY" ]] || {
+        log "Launcher network bridge missing: $CONNECT_PROXY"
+        return 1
+    }
+
+    : > "$CONNECT_LOG"
+
+    python3 "$CONNECT_PROXY" \
+        >>"$CONNECT_LOG" 2>&1 &
+
+    CONNECT_PID=$!
+
+    if ! wait_connect_port; then
+        tail -30 "$CONNECT_LOG" >&2 || true
+        stop_connect_proxy
+        return 1
+    fi
+
+    log "Launcher network bridge: 127.0.0.1:18083"
+}
+
+
+runtime_cleanup() {
+    stop_connect_proxy
+}
+
+trap runtime_cleanup EXIT INT TERM
+
+
 launch_clean() {
+    local mode="${1:-direct}"
+
     : > "$LAUNCHER_LOG"
 
-    log "Launching official Last War launcher..."
+    if [[ "$mode" == "proxy" ]]; then
+        start_connect_proxy || return 40
 
-    python3 "$UMU" "$LAUNCHER" &
+        log "Launching official launcher with network bridge..."
+
+        env \
+            -u HTTP_PROXY \
+            -u http_proxy \
+            -u ALL_PROXY \
+            -u all_proxy \
+            HTTPS_PROXY="http://127.0.0.1:18083" \
+            https_proxy="http://127.0.0.1:18083" \
+            NO_PROXY="127.0.0.1,localhost" \
+            no_proxy="127.0.0.1,localhost" \
+            python3 "$UMU" "$LAUNCHER" &
+
+    else
+        stop_connect_proxy
+
+        log "Launching official launcher directly..."
+
+        env \
+            -u HTTPS_PROXY \
+            -u https_proxy \
+            -u HTTP_PROXY \
+            -u http_proxy \
+            -u ALL_PROXY \
+            -u all_proxy \
+            -u NO_PROXY \
+            -u no_proxy \
+            python3 "$UMU" "$LAUNCHER" &
+    fi
+
     UMU_PID=$!
 
     for _ in $(seq 1 1200); do
@@ -204,46 +312,120 @@ launch_clean() {
             return 0
         fi
 
+        # Genuine update state.
         if grep -Eq \
-            'Launcher update required|Differences found , start update|Bundle version mismatch|Strict Game check: [0-9]+/[0-9]+ files match, [1-9][0-9]* replacements|Launcher error:|Failed to download file after retry|Failed to download zip manifest|Failed to load remote manifest|Failed to move downloaded bundle' \
+            'Launcher update required|Differences found , start update|Bundle version mismatch|Strict Game check: [0-9]+/[0-9]+ files match, [1-9][0-9]* replacements|Failed to move downloaded bundle to final destination' \
             "$LAUNCHER_LOG" 2>/dev/null
         then
-            log "Launcher requires update/recovery."
-            return 10
+            log "Real update/resource mismatch detected."
+            return 20
+        fi
+
+        # Transient Last War launcher networking problem.
+        if grep -Eq \
+            'Failed to get remote .* version info|Failed to load remote manifest|Failed to download zip manifest|NetSpeedError|error decoding response body|operation timed out|source: TimedOut|Launcher error:' \
+            "$LAUNCHER_LOG" 2>/dev/null
+        then
+            log "Transient launcher network failure detected."
+            return 30
         fi
 
         if ! kill -0 "$UMU_PID" 2>/dev/null; then
             log "Launcher exited before game startup."
-            return 11
+            return 31
         fi
 
         sleep 0.25
     done
 
     log "Launcher startup timed out."
-    return 12
+    return 32
 }
 
-log "LWCompat v0.2.0 starting..."
+log "LWCompat v0.2.3 starting..."
 log "Wine prefix : $PREFIX"
 log "Proton      : $PROTON"
 
-launch_clean
-RESULT=$?
+MAX_LAUNCH_ATTEMPTS=20
+UPDATE_ALREADY_RAN=0
+LAUNCH_OK=0
 
-if (( RESULT != 0 )); then
-    run_updater
+# Runtime gameplay/launcher path stays direct.
+# 18083 is reserved for the updater only.
+stop_connect_proxy
 
-    # Updater leaves everything clean/current.
-    # Start a fresh official launcher to generate the launch ticket.
-    launch_clean
+for ATTEMPT in $(seq 1 "$MAX_LAUNCH_ATTEMPTS"); do
+    log "Launcher attempt $ATTEMPT/$MAX_LAUNCH_ATTEMPTS"
+
+    launch_clean "direct"
     RESULT=$?
 
-    if (( RESULT != 0 )); then
-        stop_prefix
-        die "Launcher still failed after automatic update."
-    fi
+    case "$RESULT" in
+        0)
+            LAUNCH_OK=1
+            break
+            ;;
+
+        20)
+            stop_prefix
+            stop_connect_proxy
+
+            if (( UPDATE_ALREADY_RAN == 1 )); then
+                die "Real update/resource mismatch still exists after updater."
+            fi
+
+            log "Real update detected. Running updater..."
+
+            run_updater
+            UPDATE_ALREADY_RAN=1
+
+            log "Updater finished; returning to direct launcher."
+            sleep 1
+            ;;
+
+        30)
+            stop_prefix
+            stop_connect_proxy
+
+            log "Temporary Last War metadata timeout."
+            log "Game files are current; retrying launcher directly..."
+
+            sleep 1
+            ;;
+
+        31|32)
+            stop_prefix
+            stop_connect_proxy
+
+            log "Launcher exited before game startup."
+            log "Retrying directly..."
+
+            sleep 1
+            ;;
+
+        *)
+            stop_prefix
+            stop_connect_proxy
+
+            die "Unexpected launcher state: $RESULT"
+            ;;
+    esac
+done
+
+if (( LAUNCH_OK != 1 )); then
+    stop_prefix
+    stop_connect_proxy
+
+    die "Launcher could not start the game after $MAX_LAUNCH_ATTEMPTS attempts."
 fi
+
+# Critical: update proxy must never leak into gameplay.
+stop_connect_proxy
+
+unset HTTPS_PROXY https_proxy
+unset HTTP_PROXY http_proxy
+unset ALL_PROXY all_proxy
+unset NO_PROXY no_proxy
 
 wait "$UMU_PID"
 EXIT_CODE=$?

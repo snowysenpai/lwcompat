@@ -88,17 +88,30 @@ stop_prefix() {
 
 
 restore_fast_cache() {
-    if (( FAST_CACHE_WAS_ACTIVE == 1 )); then
-        log "Restoring Fast Asset Cache..."
-
-        "$FAST_CACHE_CMD" enable || {
-            log "WARNING: Fast Asset Cache could not be restored automatically."
-        }
-
-        FAST_CACHE_WAS_ACTIVE=0
+    if (( FAST_CACHE_WAS_ACTIVE != 1 && FAST_CACHE_WAS_ENABLED != 1 )); then
+        return 0
     fi
-}
 
+    if (( UPDATE_SUCCEEDED == 1 && FAST_CACHE_WAS_ACTIVE == 1 )); then
+        log "Refreshing Fast Asset Cache with updated bundles..."
+
+        if ! "$FAST_CACHE_CMD" refresh; then
+            log "WARNING: Fast Asset Cache refresh failed."
+            log "Leaving Fast Asset Cache disabled to avoid stale resources."
+            return 0
+        fi
+    fi
+
+    log "Restoring Fast Asset Cache..."
+
+    if ! "$FAST_CACHE_CMD" enable; then
+        log "WARNING: Fast Asset Cache restore failed."
+        return 0
+    fi
+
+    FAST_CACHE_WAS_ACTIVE=0
+    FAST_CACHE_WAS_ENABLED=0
+}
 
 cleanup() {
     stop_prefix
@@ -443,16 +456,20 @@ PY
 disable_fast_cache() {
     [[ -x "$FAST_CACHE_CMD" ]] || return 0
 
-    if "$FAST_CACHE_CMD" status \
-        | grep -q 'Status  : ACTIVE'
-    then
+    local status
+    status="$("$FAST_CACHE_CMD" status 2>/dev/null || true)"
+
+    if grep -q 'Enabled : yes' <<<"$status"; then
+        FAST_CACHE_WAS_ENABLED=1
+    fi
+
+    if grep -q 'Status  : ACTIVE' <<<"$status"; then
         FAST_CACHE_WAS_ACTIVE=1
 
         log "Temporarily disabling Fast Asset Cache..."
-
         "$FAST_CACHE_CMD" disable
     else
-        log "Fast Asset Cache already disabled."
+        log "Fast Asset Cache already inactive."
     fi
 }
 
