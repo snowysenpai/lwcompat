@@ -50,6 +50,9 @@ die() {
 # shellcheck disable=SC1090
 source "$CONFIG"
 
+# shellcheck source=launcher_log.sh
+source "$APP_DIR/launcher_log.sh" || die "Missing $APP_DIR/launcher_log.sh"
+
 GAME_DIR="$LWCOMPAT_GAME_DIR"
 PREFIX="$LWCOMPAT_PREFIX"
 UMU="$LWCOMPAT_UMU"
@@ -399,41 +402,26 @@ launch_clean() {
     UMU_PID=$!
 
     for _ in $(seq 1 1200); do
-        if grep -Fq \
-            'Starting game at:' \
-            "$LAUNCHER_LOG" 2>/dev/null
-        then
-            log "Game launch authorized by official launcher."
-            return 0
-        fi
-
-        # Genuine update state.
-        if grep -Eq \
-            'Launcher update required|Differences found , start update|Bundle version mismatch|Strict Game check: [0-9]+/[0-9]+ files match, [1-9][0-9]* replacements|Failed to move downloaded bundle to final destination' \
-            "$LAUNCHER_LOG" 2>/dev/null
-        then
-            log "Real update/resource mismatch detected."
-            return 20
-        fi
-
-        # Wine schannel can stall on the last TLS record of the signed
-        # remote manifest; it is fetched natively by fetch_signed_manifest.
-        if grep -Fq \
-            'Failed to load remote manifest' \
-            "$LAUNCHER_LOG" 2>/dev/null
-        then
-            log "Remote manifest download stalled inside Wine."
-            return 21
-        fi
-
-        # Transient Last War launcher networking problem.
-        if grep -Eq \
-            'Failed to get remote .* version info|Failed to load remote manifest|Failed to download zip manifest|NetSpeedError|error decoding response body|operation timed out|source: TimedOut|Launcher error:' \
-            "$LAUNCHER_LOG" 2>/dev/null
-        then
-            log "Transient launcher network failure detected."
-            return 30
-        fi
+        case "$(launcher_log_state "$LAUNCHER_LOG")" in
+            started)
+                log "Game launch authorized by official launcher."
+                return 0
+                ;;
+            update)
+                log "Real update/resource mismatch detected."
+                return 20
+                ;;
+            manifest-stall)
+                # Wine < 11.6 schannel stalls on the signed remote manifest;
+                # it is fetched natively by fetch_signed_manifest.
+                log "Remote manifest download stalled inside Wine."
+                return 21
+                ;;
+            transient)
+                log "Transient launcher network failure detected."
+                return 30
+                ;;
+        esac
 
         if ! kill -0 "$UMU_PID" 2>/dev/null; then
             log "Launcher exited before game startup."

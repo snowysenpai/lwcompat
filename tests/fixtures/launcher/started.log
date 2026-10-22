@@ -1,0 +1,16 @@
+[2026-10-22 11:09:58.534][Launcher::app::update][INFO] Strict Game check: 215/215 files match, 0 replacements, 0 extra/conflicting entries
+[2026-10-22 11:09:58.546][Launcher][INFO] Local manifest version: 1101
+[2026-10-22 11:09:58.769][Launcher][INFO] Remote manifest version: all,1101,4b337b2ac5fe5cb9bb58f29c4d3e278b,25240
+[2026-10-22 11:09:58.770][Launcher][INFO] Local channel: all, Remote channel: all
+[2026-10-22 11:09:58.770][Launcher][INFO] Local version: 1101, Remote version: 1101
+[2026-10-22 11:09:58.976][Launcher][INFO] Local bundle versions: [BundleManifestInfo { name: "gameres", version: 884, size: 18929432, crc32: 3899504886 }, BundleManifestInfo { name: "dllres", version: 880, size: 32593, crc32: 3990059323 }]
+[2026-10-22 11:09:59.130][Launcher][INFO] Remote bundle versions: [BundleManifestInfo { name: "gameres", version: 884, size: 18929432, crc32: 3899504886 }, BundleManifestInfo { name: "datatable", version: 701, size: 307, crc32: 1905582063 }, BundleManifestInfo { name: "lua", version: 701, size: 273, crc32: 3815578641 }, BundleManifestInfo { name: "download", version: 701, size: 293, crc32: 12895782 }, BundleManifestInfo { name: "packageres", version: 701, size: 296, crc32: 2910202726 }, BundleManifestInfo { name: "dllres", version: 880, size: 32593, crc32: 3990059323 }]
+[2026-10-22 11:09:59.333][Launcher][INFO] Data table is current. local=CurrentTableState { version: 39746, md5: "4c8b6c4fbd567218c8b780a5b2305b94", file_path: Some("C:\\users\\steamuser\\AppData\\LocalLow\\FunFly\\Last War-Survival Game\\table\\table_39746_4c8b6c4fbd567218c8b780a5b2305b94.data"), exists: true, encrypt_format: Lenc }, remote_version=39746, format=Lenc
+[2026-10-22 11:09:59.859][Launcher][INFO] LWLuaFile is current. local=LwLuaState { version: 27, file_version: 3, size: 41353768, crc: 1483198569, exists: true }, remote_version=27, format=Lenc
+[2026-10-22 11:09:59.866][Launcher][INFO] Starting pack sync with pack directory: "C:\\FunFly\\Last War-Survival Game\\Cache\\AssetBundles\\CombinedBundles"
+[2026-10-22 11:09:59.877][Launcher::app::pack][INFO] pack: found existing index file "C:\\FunFly\\Last War-Survival Game\\Cache\\AssetBundles\\CombinedBundles\\bundles.idx"
+[2026-10-22 11:09:59.884][Launcher::app::pack][INFO] pack: start hash verify
+[2026-10-22 11:10:01.381][Launcher::app::pack][INFO] pack: index hash verification succeeded
+[2026-10-22 11:10:02.143][Launcher::app::update][INFO] Strict Game check: 215/215 files match, 0 replacements, 0 extra/conflicting entries
+[2026-10-22 11:10:02.143][Launcher][INFO] Launch integrity check completed in 755.3668ms
+[2026-10-22 11:10:02.148][Launcher][INFO] Starting game at: "C:\\users\\steamuser\\AppData\\Local\\FunFly\\Last War-Survival Game\\Game\\LastWar.exe"

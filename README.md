@@ -644,6 +644,16 @@ LWCompat does not ship proprietary game artwork.
 
 The installer attempts to extract the icon from the local official game installation when `wrestool`, `icotool`, and optionally `identify` are available.
 
+## Tests
+
+```bash
+tests/run.sh
+```
+
+Runs syntax checks, `shellcheck` (if installed) and the tests in `tests/`. Nothing touches
+the game, the Wine prefix or the system; the Fast Asset Cache test runs in a private mount
+namespace and is skipped where unprivileged user namespaces are unavailable.
+
 ## Uninstall
 
 Normal uninstall:

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added tests (`tests/run.sh`, also run in GitHub Actions): launcher log classification on
+  real `Launcher.log` samples, native manifest fetch against a local server with a synthetic
+  manifest, Fast Asset Cache helper/ctl in a private mount namespace, and session logs.
+- Launcher log classification moved to `src/launcher_log.sh`, shared by `lwcompat.sh` and
+  `lwcompat-doctor`.
 - One log file per launch under `logs/sessions/`; `logs/lwcompat.log` is a symlink to the
   newest session, so the GUI no longer re-reads the whole history on every refresh.
   The last 10 sessions are kept (`LWCOMPAT_KEEP_LOGS`); the old single log is archived once.

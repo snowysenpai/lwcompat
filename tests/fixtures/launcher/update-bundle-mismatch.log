@@ -1,0 +1,6 @@
+[2026-10-21 17:27:28.074][Launcher][INFO] Local channel: all, Remote channel: all
+[2026-10-21 17:27:28.074][Launcher][INFO] Local version: 1101, Remote version: 1101
+[2026-10-21 17:27:28.250][Launcher][INFO] Local bundle versions: [BundleManifestInfo { name: "gameres", version: 883, size: 18902742, crc32: 3523165215 }, BundleManifestInfo { name: "dllres", version: 879, size: 32595, crc32: 654300056 }]
+[2026-10-21 17:27:28.413][Launcher][INFO] Remote bundle versions: [BundleManifestInfo { name: "gameres", version: 884, size: 18929432, crc32: 3899504886 }, BundleManifestInfo { name: "datatable", version: 701, size: 307, crc32: 1905582063 }, BundleManifestInfo { name: "lua", version: 701, size: 273, crc32: 3815578641 }, BundleManifestInfo { name: "download", version: 701, size: 293, crc32: 12895782 }, BundleManifestInfo { name: "packageres", version: 701, size: 296, crc32: 2910202726 }, BundleManifestInfo { name: "dllres", version: 880, size: 32593, crc32: 3990059323 }]
+[2026-10-21 17:27:28.413][Launcher][INFO] Bundle version mismatch for gameres: local 883, 3523165215 remote 884, 3899504886
+[2026-10-21 17:27:39.348][Launcher][ERROR] Failed to download zip manifest: NetworkError(reqwest::Error { kind: Decode, source: reqwest::Error { kind: Body, source: reqwest::Error { kind: Body, source: TimedOut } } })

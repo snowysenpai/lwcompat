@@ -338,6 +338,7 @@ fi
 mkdir -p "$APP_DIR" "$APP_DIR/logs" "$BACKUP_DIR" "$BIN_DIR" "$APPS_DIR" "$ICONS_DIR"
 
 install -m 0755 "$ROOT_DIR/src/lwcompat.sh" "$APP_DIR/lwcompat.sh"
+install -m 0644 "$ROOT_DIR/src/launcher_log.sh" "$APP_DIR/launcher_log.sh"
 install -m 0644 "$ROOT_DIR/VERSION" "$APP_DIR/VERSION"
 install -m 0755 "$ROOT_DIR/src/start.sh" "$APP_DIR/start.sh"
 install -m 0755 "$ROOT_DIR/src/bundle_proxy.py" "$APP_DIR/bundle_proxy.py"

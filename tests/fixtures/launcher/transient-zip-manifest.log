@@ -1,0 +1,7 @@
+[2026-10-14 14:57:11.918][Launcher][ERROR] Failed to download zip manifest: NetworkError(reqwest::Error { kind: Decode, source: reqwest::Error { kind: Body, source: reqwest::Error { kind: Body, source: TimedOut } } })
+[2026-10-14 14:57:11.919][Launcher][ERROR] Launcher error: Some(error decoding response body
+
+Caused by:
+    0: request or response body error
+    1: request or response body error
+    2: operation timed out)

@@ -1,0 +1,11 @@
+[2026-10-21 17:15:26.696][Launcher::app::update][INFO] Strict Game check: 215/215 files match, 0 replacements, 0 extra/conflicting entries
+[2026-10-21 17:15:26.706][Launcher][INFO] Local manifest version: 1093
+[2026-10-21 17:15:26.858][Launcher][INFO] Remote manifest version: all,1101,4b337b2ac5fe5cb9bb58f29c4d3e278b,25240
+[2026-10-21 17:15:26.858][Launcher][INFO] Local channel: all, Remote channel: all
+[2026-10-21 17:15:26.858][Launcher][INFO] Local version: 1093, Remote version: 1101
+[2026-10-21 17:15:31.860][Launcher][ERROR] Failed to load remote manifest: NetworkError(reqwest::Error { kind: Decode, source: reqwest::Error { kind: Body, source: TimedOut } })
+[2026-10-21 17:15:31.861][Launcher][ERROR] Launcher error: Some(error decoding response body
+
+Caused by:
+    0: request or response body error
+    1: operation timed out)

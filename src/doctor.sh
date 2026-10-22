@@ -12,6 +12,9 @@ SETTINGS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/lwcompat/settings.conf"
 SESSION_LOG="$APP_DIR/logs/lwcompat.log"
 CDN_BASE="https://lastwar-cdn.akamaized.net/hotupdate/pc/micro"
 
+# shellcheck source=launcher_log.sh
+source "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/launcher_log.sh"
+
 OFFLINE=0
 [[ "${1:-}" == "--offline" ]] && OFFLINE=1
 
@@ -77,19 +80,19 @@ report() {
     section "Last launcher run"
     local verdict="no Launcher.log"
     if [[ -f "$launcher_log" ]]; then
-        if grep -Fq 'Starting game at:' "$launcher_log"; then
-            verdict="OK: game started"
-        elif grep -Fq 'Failed to load remote manifest' "$launcher_log"; then
-            verdict="manifest download stalled in Wine (LWCompat fetches it natively)"
-        elif grep -Eq 'Launcher update required|Differences found|[1-9][0-9]* replacements' "$launcher_log"; then
-            verdict="real update pending"
-        elif grep -Eq 'TimedOut|error decoding response body' "$launcher_log"; then
-            verdict="transient network timeout (retried automatically)"
-        elif grep -Fq 'ERROR' "$launcher_log"; then
-            verdict="other launcher error (see below)"
-        else
-            verdict="no decision recorded"
-        fi
+        case "$(launcher_log_state "$launcher_log")" in
+            started) verdict="OK: game started" ;;
+            update) verdict="real update pending" ;;
+            manifest-stall) verdict="manifest download stalled in Wine (LWCompat fetches it natively)" ;;
+            transient) verdict="transient network timeout (retried automatically)" ;;
+            *)
+                if grep -Fq 'ERROR' "$launcher_log"; then
+                    verdict="other launcher error (see below)"
+                else
+                    verdict="no decision recorded"
+                fi
+                ;;
+        esac
         row "Updated" "$(date -r "$launcher_log" '+%F %T')"
     fi
     row "Verdict" "$verdict"
