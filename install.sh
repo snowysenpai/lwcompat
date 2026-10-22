@@ -351,6 +351,7 @@ install -m 0755 "$ROOT_DIR/src/network_feed.py" "$APP_DIR/network_feed.py"
 install -m 0755 "$ROOT_DIR/src/doctor.sh" "$APP_DIR/doctor.sh"
 install -m 0755 "$ROOT_DIR/src/fetch_proton.sh" "$APP_DIR/fetch_proton.sh"
 install -m 0755 "$ROOT_DIR/src/prefix_fonts.sh" "$APP_DIR/prefix_fonts.sh"
+install -m 0755 "$ROOT_DIR/src/profiles.py" "$APP_DIR/profiles.py"
 install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
 install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 
@@ -386,6 +387,7 @@ ln -sfn "$APP_DIR/fast_asset_cache_ctl.sh" "$BIN_DIR/lwcompat-fast-cache"
 ln -sfn "$APP_DIR/overlay_ctl.sh" "$BIN_DIR/lwcompat-overlay"
 ln -sfn "$APP_DIR/update.sh" "$BIN_DIR/lwcompat-update"
 ln -sfn "$APP_DIR/doctor.sh" "$BIN_DIR/lwcompat-doctor"
+ln -sfn "$APP_DIR/profiles.py" "$BIN_DIR/lwcompat-profile"
 
 install_gui() {
     local mode

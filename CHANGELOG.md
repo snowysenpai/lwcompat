@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added `lwcompat-profile` (save/use/list/delete) to switch between saved game logins
+  without e-mail codes. A profile is a copy of the few PlayerPrefs that hold the login;
+  game files, Fast Asset Cache and the device identity stay shared. Profiles are stored
+  0600, values are never printed, `user.reg` is backed up before each switch, and the
+  active profile's refreshed tokens are saved before switching away.
 - GUI overlay row: separate `DXVK HUD` and `LWCOMPAT HUD` switches, plus an experimental
   `WAYLAND` switch (`lwcompat-overlay wayland on`) that runs Wine's native Wayland driver;
   meant for click offsets in windowed mode under XWayland. The launch log shows the driver.
