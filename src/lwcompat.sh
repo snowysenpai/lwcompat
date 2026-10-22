@@ -451,7 +451,9 @@ fetch_signed_manifest() {
         --backup-dir "$APP_DIR/backups/manifests"
 }
 
-log "LWCompat v0.2.3 starting..."
+LWCOMPAT_VERSION="$(cat "$APP_DIR/VERSION" 2>/dev/null || echo unknown)"
+
+log "LWCompat v$LWCOMPAT_VERSION starting..."
 log "Wine prefix : $PREFIX"
 log "Proton      : $PROTON"
 

@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-10-22
+
+Version numbers are now taken from `VERSION` (launcher log, installer) and match the
+GUI crate. Intermediate 0.2.x builds were not tagged.
 
 ### Launcher / updates
 - Fixed endless `error decoding response body ... operation timed out` loops when a new
