@@ -32,5 +32,15 @@ ctl fps toggle >/dev/null
 assert_eq 42 "$(val LWCOMPAT_SOMETHING_NEW)" "unknown keys survive a change"
 assert_eq 1 "$(grep -c '^LWCOMPAT_FPS=' "$T/lwcompat/settings.conf")" "known keys are not duplicated"
 
+ctl fpslimit 60 >/dev/null
+assert_eq 60 "$(val LWCOMPAT_FPS_LIMIT)" "fps limit set"
+ctl status | grep -qx 'FPS LIMIT : 60' && pass "status shows the limit" || fail "limit status"
+ctl fpslimit 5 >/dev/null 2>&1 && fail "accepted a 5 FPS limit" || pass "rejects limits below 20"
+ctl fpslimit abc >/dev/null 2>&1 && fail "accepted a non-number" || pass "rejects non-numbers"
+ctl fps toggle >/dev/null
+assert_eq 60 "$(val LWCOMPAT_FPS_LIMIT)" "limit kept when other settings change"
+ctl fpslimit off >/dev/null
+assert_eq 0 "$(val LWCOMPAT_FPS_LIMIT)" "fps limit off"
+
 ctl custom bogus >/dev/null 2>&1 && fail "invalid state accepted" || pass "invalid state rejected"
 finish

@@ -158,6 +158,7 @@ LWCOMPAT_FPS=0
 LWCOMPAT_HUD=0
 LWCOMPAT_CUSTOM_HUD=0
 LWCOMPAT_WAYLAND=0
+LWCOMPAT_FPS_LIMIT=0
 
 if [[ -r "$SETTINGS_FILE" ]]; then
     # shellcheck disable=SC1090
@@ -168,6 +169,17 @@ fi
 [[ "$LWCOMPAT_HUD" == "1" ]] || LWCOMPAT_HUD=0
 [[ "$LWCOMPAT_CUSTOM_HUD" == "1" ]] || LWCOMPAT_CUSTOM_HUD=0
 [[ "$LWCOMPAT_WAYLAND" == "1" ]] || LWCOMPAT_WAYLAND=0
+
+# Frame rate cap through DXVK (menus and loading screens included).
+if [[ "$LWCOMPAT_FPS_LIMIT" =~ ^[0-9]+$ ]] &&
+   (( LWCOMPAT_FPS_LIMIT >= 20 && LWCOMPAT_FPS_LIMIT <= 360 ))
+then
+    export DXVK_FRAME_RATE="$LWCOMPAT_FPS_LIMIT"
+    log "FPS limit      : $LWCOMPAT_FPS_LIMIT"
+else
+    unset DXVK_FRAME_RATE
+    log "FPS limit      : OFF"
+fi
 
 # Wine's native Wayland driver (experimental). Under XWayland, windowed
 # Unity games can map clicks with an offset after the compositor resizes

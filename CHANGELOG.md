@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- HUD: **slow route warning**. Each TCP connection lands on a ~30 ms or a ~160 ms path;
+  `network_feed.py` classifies every new connection once its RTT settles (threshold 100 ms,
+  `LWCOMPAT_SLOW_RTT`) and the HUD shows `SLOW ROUTE … try reconnecting` for its first
+  seconds. The feed line gained `Age` and `Route` fields.
+- **FPS limit** through DXVK (`lwcompat-overlay fpslimit 60|off`, GUI menu with
+  Off/30/60/90/120/144).
+
 ## 0.5.0 - 2026-10-22
 
 ### Accounts

@@ -40,6 +40,7 @@ struct LWCompat {
     hud_overlay: bool,
     custom_hud: bool,
     wayland: bool,
+    fps_limit: u32,
     overlay_error: bool,
     last_overlay_refresh: Instant,
 
@@ -78,6 +79,7 @@ impl LWCompat {
             hud_overlay: false,
             custom_hud: false,
             wayland: false,
+            fps_limit: 0,
             overlay_error: false,
             last_overlay_refresh:
                 Instant::now() - Duration::from_secs(5),
@@ -419,6 +421,12 @@ impl LWCompat {
                         line.trim() == "WAYLAND : ON"
                     });
 
+                self.fps_limit = text
+                    .lines()
+                    .find_map(|line| line.trim().strip_prefix("FPS LIMIT : "))
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0);
+
                 self.overlay_error =
                     !output.status.success();
             }
@@ -452,6 +460,23 @@ impl LWCompat {
         self.overlay_error =
             !matches!(result, Ok(ref o) if o.status.success());
 
+        self.refresh_overlays();
+    }
+
+    fn set_fps_limit(&mut self, limit: u32) {
+        if self.running {
+            return;
+        }
+
+        let Some(ctl) = Self::overlay_ctl() else {
+            self.overlay_error = true;
+            return;
+        };
+
+        let value = if limit == 0 { "off".to_owned() } else { limit.to_string() };
+        let result = Command::new("bash").arg(ctl).arg("fpslimit").arg(value).output();
+
+        self.overlay_error = !matches!(result, Ok(ref o) if o.status.success());
         self.refresh_overlays();
     }
 
@@ -848,6 +873,7 @@ impl LWCompat {
         ];
 
         let mut clicked = None;
+        let mut new_limit: Option<u32> = None;
 
         ui.horizontal(|ui| {
             ui.label(
@@ -879,6 +905,31 @@ impl LWCompat {
                     clicked = Some(target);
                 }
             }
+
+            ui.add_space(6.0);
+
+            let label = |limit: u32| {
+                if limit == 0 { "FPS LIMIT  OFF".to_owned() } else { format!("FPS LIMIT  {limit}") }
+            };
+
+            ui.add_enabled_ui(controls_enabled, |ui| {
+                egui::ComboBox::from_id_salt("lwcompat_fps_limit")
+                    .selected_text(
+                        egui::RichText::new(label(self.fps_limit))
+                            .size(10.5)
+                            .strong()
+                            .color(if self.fps_limit > 0 { GREEN } else { egui::Color32::GRAY }),
+                    )
+                    .show_ui(ui, |ui| {
+                        for limit in [0, 30, 60, 90, 120, 144] {
+                            if ui.selectable_label(self.fps_limit == limit, label(limit)).clicked() {
+                                new_limit = Some(limit);
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("Caps the frame rate through DXVK; lower values reduce GPU heat and noise.");
+            });
 
             if self.running {
                 ui.label(
@@ -920,6 +971,12 @@ impl LWCompat {
 
         if let Some(target) = clicked {
             self.toggle_overlay(target);
+        }
+
+        if let Some(limit) = new_limit {
+            if limit != self.fps_limit {
+                self.set_fps_limit(limit);
+            }
         }
     }
 

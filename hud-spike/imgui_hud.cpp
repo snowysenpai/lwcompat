@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <mutex>
 #include <string>
@@ -51,6 +52,11 @@ struct HudState {
     int server = 0;
     float rtt = 0.0f;
     bool network_valid = false;
+
+    // From network_feed.py: seconds since this TCP connection appeared and
+    // whether it landed on the slow (~160 ms) path.
+    int connection_age = 0;
+    bool route_slow = false;
 
     VkSampler blur_sampler = VK_NULL_HANDLE;
     VkImageView blur_view = VK_NULL_HANDLE;
@@ -182,6 +188,12 @@ void update_network()
         g.server = server;
         g.rtt = static_cast<float>(rtt);
         g.network_valid = true;
+
+        const char* age = std::strstr(line.c_str(), "| Age ");
+        g.connection_age = age ? std::atoi(age + 6) : 0;
+
+        const char* route = std::strstr(line.c_str(), "| Route ");
+        g.route_slow = route && std::strncmp(route + 8, "slow", 4) == 0;
     } else {
         g.network_valid = false;
     }
@@ -819,6 +831,41 @@ void lw_hud_render(
         ),
         fps_text
     );
+
+    // Slow-route warning during the first seconds of a slow connection, so a
+    // reconnect can be tried before timing-sensitive actions.
+    constexpr int kSlowRouteBannerSeconds = 13;
+
+    if (g.network_valid && g.route_slow
+        && g.connection_age < kSlowRouteBannerSeconds) {
+        const float by = y + h + 6.0f * scale;
+        const float bh = 26.0f * scale;
+
+        draw->AddRectFilled(
+            ImVec2(x, by),
+            ImVec2(x + w, by + bh),
+            IM_COL32(150, 35, 35, 215),
+            radius
+        );
+
+        char banner[96];
+        std::snprintf(
+            banner,
+            sizeof(banner),
+            "SLOW ROUTE %.0f ms - try reconnecting",
+            g.rtt
+        );
+
+        const float banner_font = 13.0f * scale;
+
+        draw->AddText(
+            ImGui::GetFont(),
+            banner_font,
+            ImVec2(x + 10.0f * scale, by + (bh - banner_font) * 0.5f),
+            IM_COL32(255, 240, 240, 255),
+            banner
+        );
+    }
 
     ImGui::Render();
 

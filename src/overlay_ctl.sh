@@ -4,6 +4,7 @@
 #   hud     DXVK performance HUD        (LWCOMPAT_HUD)
 #   custom  LWCompat custom Vulkan HUD  (LWCOMPAT_CUSTOM_HUD)
 #   wayland Wine's native Wayland driver (LWCOMPAT_WAYLAND)
+#   fpslimit  DXVK frame rate cap, 0 = off (LWCOMPAT_FPS_LIMIT)
 set -euo pipefail
 
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lwcompat"
@@ -13,12 +14,14 @@ FPS=0
 HUD=0
 CUSTOM=0
 WAYLAND=0
+LIMIT=0
 
 load_config() {
     LWCOMPAT_FPS=0
     LWCOMPAT_HUD=0
     LWCOMPAT_CUSTOM_HUD=0
     LWCOMPAT_WAYLAND=0
+    LWCOMPAT_FPS_LIMIT=0
 
     if [[ -r "$CONFIG" ]]; then
         # shellcheck disable=SC1090
@@ -29,11 +32,18 @@ load_config() {
     HUD="$LWCOMPAT_HUD"
     CUSTOM="$LWCOMPAT_CUSTOM_HUD"
     WAYLAND="$LWCOMPAT_WAYLAND"
+    LIMIT="$LWCOMPAT_FPS_LIMIT"
 
     [[ "$FPS" == "1" ]] || FPS=0
     [[ "$HUD" == "1" ]] || HUD=0
     [[ "$CUSTOM" == "1" ]] || CUSTOM=0
     [[ "$WAYLAND" == "1" ]] || WAYLAND=0
+    valid_limit "$LIMIT" || LIMIT=0
+}
+
+# 0 (off) or a cap between 20 and 360 FPS.
+valid_limit() {
+    [[ "$1" == "0" ]] || { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 20 && $1 <= 360 )); }
 }
 
 # Writes every key this tool knows and keeps any other line untouched, so
@@ -46,12 +56,13 @@ save_config() {
 
     {
         if [[ -r "$CONFIG" ]]; then
-            grep -vE '^(LWCOMPAT_FPS|LWCOMPAT_HUD|LWCOMPAT_CUSTOM_HUD|LWCOMPAT_WAYLAND)=' "$CONFIG" || true
+            grep -vE '^(LWCOMPAT_FPS|LWCOMPAT_HUD|LWCOMPAT_CUSTOM_HUD|LWCOMPAT_WAYLAND|LWCOMPAT_FPS_LIMIT)=' "$CONFIG" || true
         fi
         printf 'LWCOMPAT_FPS=%s\n' "$FPS"
         printf 'LWCOMPAT_HUD=%s\n' "$HUD"
         printf 'LWCOMPAT_CUSTOM_HUD=%s\n' "$CUSTOM"
         printf 'LWCOMPAT_WAYLAND=%s\n' "$WAYLAND"
+        printf 'LWCOMPAT_FPS_LIMIT=%s\n' "$LIMIT"
     } > "$tmp"
 
     chmod 0600 "$tmp"
@@ -71,6 +82,11 @@ show_status() {
     echo "HUD : $(on_off "$HUD")"
     echo "CUSTOM HUD : $(on_off "$CUSTOM")"
     echo "WAYLAND : $(on_off "$WAYLAND")"
+    if [[ "$LIMIT" == "0" ]]; then
+        echo "FPS LIMIT : OFF"
+    else
+        echo "FPS LIMIT : $LIMIT"
+    fi
 }
 
 # new_value current requested -> prints 0/1
@@ -109,6 +125,24 @@ case "${1:-status}" in
         show_status
         ;;
 
+    fpslimit)
+        [[ $# -ge 2 ]] || {
+            echo "Usage: lwcompat-overlay fpslimit {off|20-360}" >&2
+            exit 2
+        }
+
+        load_config
+        value="$2"
+        [[ "$value" == "off" ]] && value=0
+        valid_limit "$value" || {
+            echo "Invalid FPS limit: $2 (use off or 20-360)" >&2
+            exit 2
+        }
+        LIMIT="$value"
+        save_config
+        show_status
+        ;;
+
     fps|hud|custom|wayland)
         [[ $# -ge 2 ]] || {
             echo "Usage: lwcompat-overlay {fps|hud|custom|wayland} {on|off|toggle}" >&2
@@ -125,6 +159,7 @@ case "${1:-status}" in
         echo "  lwcompat-overlay hud {on|off|toggle}      DXVK performance HUD" >&2
         echo "  lwcompat-overlay custom {on|off|toggle}   LWCompat custom Vulkan HUD" >&2
         echo "  lwcompat-overlay wayland {on|off|toggle}  Wine native Wayland driver (experimental)" >&2
+        echo "  lwcompat-overlay fpslimit {off|20-360}    DXVK frame rate cap" >&2
         exit 2
         ;;
 esac

@@ -206,11 +206,22 @@ def score_socket(sock, sticky_endpoint=None):
     return score
 
 
+# A connection is classified once, after its RTT estimate settles. Last War
+# connections land on either a ~30 ms or a ~160 ms path per TCP connection,
+# so a slow verdict means reconnecting is likely to help.
+SLOW_RTT_MS = float(os.environ.get("LWCOMPAT_SLOW_RTT", "100"))
+SETTLE_SECONDS = 3.0
+
+
 class NetworkState:
-    def __init__(self):
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
         self.endpoint = None
         self.previous_rtt = None
         self.jitter = 0.0
+        self.connection = None
+        self.since = 0.0
+        self.route = None
 
     def update(self):
         sockets = read_sockets()
@@ -219,6 +230,8 @@ class NetworkState:
             self.endpoint = None
             self.previous_rtt = None
             self.jitter = 0.0
+            self.connection = None
+            self.route = None
             return None
 
         selected = max(
@@ -236,7 +249,17 @@ class NetworkState:
             self.previous_rtt = None
             self.jitter = 0.0
 
+        # Same server, new TCP connection (e.g. after switching accounts).
+        connection = endpoint + (selected["local_port"],)
+        if connection != self.connection:
+            self.connection = connection
+            self.since = self.clock()
+            self.route = None
+
         rtt = selected["rtt"]
+
+        if self.route is None and self.age() >= SETTLE_SECONDS:
+            self.route = "slow" if rtt >= SLOW_RTT_MS else "fast"
 
         if self.previous_rtt is not None:
             delta = abs(rtt - self.previous_rtt)
@@ -245,6 +268,9 @@ class NetworkState:
         self.previous_rtt = rtt
 
         return selected
+
+    def age(self):
+        return self.clock() - self.since if self.connection else 0.0
 
 
 def format_state(sock, state, verbose=False):
@@ -263,7 +289,9 @@ def format_state(sock, state, verbose=False):
         f"RTT {sock['rtt']:.1f} ms | "
         f"Jitter {state.jitter:.1f} ms | "
         f"Var {sock['rttvar']:.1f} ms | "
-        f"Rtx {sock['retrans']}"
+        f"Rtx {sock['retrans']} | "
+        f"Age {int(state.age())} s | "
+        f"Route {state.route or '?'}"
     )
 
     if verbose:
