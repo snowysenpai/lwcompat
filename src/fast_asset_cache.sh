@@ -23,48 +23,112 @@ source "$CONFIG"
 
 MNT="${MNT:-/mnt/lwcompat-assetbundles}"
 
-start_cache() {
-    [[ -f "$FAST_IMG" ]] || die "Image not found: $FAST_IMG"
-    [[ -d "$TARGET" ]] || die "AssetBundles target not found: $TARGET"
+# The whole launcher Cache directory is bound from the image, not only
+# AssetBundles: the launcher downloads into Cache/AssetBundles.Temp and
+# renames into Cache/AssetBundles, and rename(2) fails with EXDEV across
+# filesystems or separate bind mounts (Wine: ERROR_NOT_SAME_DEVICE).
+CACHE_TARGET="$(dirname -- "$TARGET")"
+IMAGE_CACHE="$MNT/Cache"
+IMAGE_BUNDLES="$IMAGE_CACHE/AssetBundles"
+LEGACY_BUNDLES="$MNT/AssetBundles"
 
+# Top-level Cache entries mirrored as empty directories inside the image.
+CACHE_DIRS=(AssetBundles.Temp warmup)
+
+mount_image() {
     mkdir -p "$MNT"
-
-    # Already active: leave it alone.
-    if mountpoint -q "$TARGET"; then
-        fs="$(findmnt -n -o FSTYPE -T "$TARGET" 2>/dev/null || true)"
-        src="$(findmnt -n -o SOURCE -T "$TARGET" 2>/dev/null || true)"
-
-        if [[ "$fs" == "ext4" && "$src" == *"[/AssetBundles]"* ]]; then
-            log "Fast Asset Cache already active."
-            return 0
-        fi
-
-        die "Target is already mounted by something else: $src ($fs)"
-    fi
 
     if ! mountpoint -q "$MNT"; then
         log "Mounting ext4 casefold image..."
         mount -o loop,noatime "$FAST_IMG" "$MNT"
+        return 0
     fi
 
-    [[ -d "$MNT/AssetBundles" ]] ||
-        die "AssetBundles directory missing inside image."
+    return 1
+}
 
-    attrs="$(lsattr -d "$MNT/AssetBundles" 2>/dev/null | awk '{print $1}')"
+make_casefold_dir() {
+    local dir="$1"
+    local owner="$2"
+
+    [[ -d "$dir" ]] && return 0
+
+    mkdir "$dir"
+    chown "$owner" "$dir"
+    chattr +F "$dir"
+}
+
+# Convert the legacy image layout (/AssetBundles) to /Cache/AssetBundles.
+# Same filesystem, so this is a rename, not a copy.
+prepare_layout() {
+    local owner
+
+    if [[ ! -d "$IMAGE_BUNDLES" ]]; then
+        [[ -d "$LEGACY_BUNDLES" ]] ||
+            die "AssetBundles directory missing inside image."
+
+        log "Migrating image layout to Cache-level mount..."
+
+        owner="$(stat -c '%u:%g' "$LEGACY_BUNDLES")"
+
+        mkdir -p "$IMAGE_CACHE"
+        chown "$owner" "$IMAGE_CACHE"
+        mv "$LEGACY_BUNDLES" "$IMAGE_BUNDLES"
+    fi
+
+    owner="$(stat -c '%u:%g' "$IMAGE_BUNDLES")"
+
+    for name in "${CACHE_DIRS[@]}"; do
+        make_casefold_dir "$IMAGE_CACHE/$name" "$owner"
+    done
+
+    attrs="$(lsattr -d "$IMAGE_BUNDLES" 2>/dev/null | awk '{print $1}')"
 
     [[ "$attrs" == *F* ]] ||
         die "AssetBundles inside image does not have the casefold (F) attribute."
+}
 
-    log "Binding Fast Asset Cache to game directory..."
-    mount --bind "$MNT/AssetBundles" "$TARGET"
+active_source() {
+    findmnt -n -o SOURCE -T "$TARGET" 2>/dev/null || true
+}
+
+start_cache() {
+    [[ -f "$FAST_IMG" ]] || die "Image not found: $FAST_IMG"
+    [[ -d "$TARGET" ]] || die "AssetBundles target not found: $TARGET"
+
+    if mountpoint -q "$CACHE_TARGET"; then
+        if [[ "$(active_source)" == *"[/Cache]"* ]]; then
+            log "Fast Asset Cache already active."
+            return 0
+        fi
+
+        die "Cache directory is already mounted by something else: $(active_source)"
+    fi
+
+    # Legacy AssetBundles-only bind left behind by an older helper.
+    if mountpoint -q "$TARGET"; then
+        log "Removing legacy AssetBundles bind mount..."
+        umount "$TARGET"
+    fi
+
+    mount_image || true
+    prepare_layout
+
+    log "Binding Fast Asset Cache to launcher Cache directory..."
+    mount --bind "$IMAGE_CACHE" "$CACHE_TARGET"
 
     log "Fast Asset Cache active:"
-    findmnt -T "$TARGET"
+    findmnt -T "$CACHE_TARGET"
 }
 
 stop_cache() {
+    if mountpoint -q "$CACHE_TARGET"; then
+        log "Unmounting Cache bind mount..."
+        umount "$CACHE_TARGET"
+    fi
+
     if mountpoint -q "$TARGET"; then
-        log "Unmounting AssetBundles bind mount..."
+        log "Unmounting legacy AssetBundles bind mount..."
         umount "$TARGET"
     fi
 
@@ -80,23 +144,18 @@ sync_cache() {
     [[ -f "$FAST_IMG" ]] || die "Image not found: $FAST_IMG"
     [[ -d "$TARGET" ]] || die "AssetBundles target not found: $TARGET"
 
-    if mountpoint -q "$TARGET"; then
+    if mountpoint -q "$CACHE_TARGET" || mountpoint -q "$TARGET"; then
         die "Fast Asset Cache must be disabled before refresh."
     fi
-
-    mkdir -p "$MNT"
 
     local mounted_here=0
     local rc=0
 
-    if ! mountpoint -q "$MNT"; then
-        log "Mounting ext4 image for refresh..."
-        mount -o loop,noatime "$FAST_IMG" "$MNT"
+    if mount_image; then
         mounted_here=1
     fi
 
-    [[ -d "$MNT/AssetBundles" ]] ||
-        die "AssetBundles directory missing inside image."
+    prepare_layout
 
     log "Refreshing Fast Asset Cache from updated game data..."
 
@@ -105,7 +164,7 @@ sync_cache() {
         --delete \
         --info=stats2 \
         "$TARGET/" \
-        "$MNT/AssetBundles/" || rc=$?
+        "$IMAGE_BUNDLES/" || rc=$?
 
     sync
 
@@ -124,16 +183,16 @@ sync_cache() {
 status_cache() {
     echo "=== LWCompat Fast Asset Cache ==="
     echo "Image : $FAST_IMG"
-    echo "Target: $TARGET"
+    echo "Target: $CACHE_TARGET"
     echo "Mount : $MNT"
     echo
 
-    if mountpoint -q "$TARGET"; then
+    if mountpoint -q "$CACHE_TARGET" || mountpoint -q "$TARGET"; then
         echo "Status: ACTIVE"
         findmnt -T "$TARGET"
     else
         echo "Status: INACTIVE"
-        echo "Original AssetBundles directory is being used."
+        echo "Original Cache directory is being used."
     fi
 }
 

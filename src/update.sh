@@ -8,6 +8,7 @@ CONFIG="$APP_DIR/config.sh"
 
 CONNECT_PROXY="$SCRIPT_DIR/connect_proxy.py"
 BOOTSTRAP_CLIENT="$SCRIPT_DIR/bootstrap_client.py"
+MANIFEST_FETCH="$SCRIPT_DIR/fetch_signed_manifest.py"
 
 CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/lwcompat/update"
 LOG_DIR="$CACHE_ROOT/logs"
@@ -45,6 +46,8 @@ CONNECT_PID=""
 UMU_PID=""
 
 FAST_CACHE_WAS_ACTIVE=0
+FAST_CACHE_WAS_ENABLED=0
+UPDATE_SUCCEEDED=0
 
 
 log() {
@@ -459,6 +462,17 @@ disable_fast_cache() {
     local status
     status="$("$FAST_CACHE_CMD" status 2>/dev/null || true)"
 
+    # Cache-level mount keeps AssetBundles.Temp and AssetBundles on the same
+    # filesystem, so the launcher can update in place. Only the legacy
+    # AssetBundles-only mount (or a move failure) needs the disable/refresh
+    # round trip.
+    if [[ "${1:-}" != "force" ]] &&
+       grep -q 'Layout  : cache' <<<"$status"
+    then
+        log "Fast Asset Cache stays active (Cache-level mount)."
+        return 0
+    fi
+
     if grep -q 'Enabled : yes' <<<"$status"; then
         FAST_CACHE_WAS_ENABLED=1
     fi
@@ -510,6 +524,15 @@ sync_resources_with_retries() {
                     | sed 's/^/[launcher] /'
 
                 stop_prefix
+
+                if grep -Fq \
+                    'Failed to move downloaded bundle' \
+                    "$LAUNCHER_LOG" 2>/dev/null \
+                   && (( FAST_CACHE_WAS_ACTIVE == 0 ))
+                then
+                    log "Bundle move failed with Fast Asset Cache active; falling back."
+                    disable_fast_cache force
+                fi
 
                 log "Retrying automatically in 2 seconds..."
                 sleep 2
@@ -593,6 +616,24 @@ acquire_current_manifest() {
                 'Launcher error:' \
                 "$LAUNCHER_LOG" 2>/dev/null
             then
+                # Wine schannel can stall on the signed manifest body;
+                # fetch it natively and let the next attempt verify it.
+                if grep -Fq \
+                    'Failed to load remote manifest' \
+                    "$LAUNCHER_LOG" 2>/dev/null \
+                   && [[ -f "$MANIFEST_FETCH" ]]
+                then
+                    stop_prefix
+
+                    if python3 "$MANIFEST_FETCH" \
+                        --game-dir "$GAME_DIR" \
+                        --launcher-log "$LAUNCHER_LOG" \
+                        --backup-dir "$APP_DIR/backups/manifests"
+                    then
+                        log "Signed manifest fetched natively."
+                    fi
+                fi
+
                 break
             fi
 
@@ -650,6 +691,7 @@ main() {
 
     log "Phase 3/4: launcher resources."
     sync_resources_with_retries
+    UPDATE_SUCCEEDED=1
 
     log "Phase 4/4: cleanup."
 

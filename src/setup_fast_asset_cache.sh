@@ -30,6 +30,11 @@ FAST_IMG="$FAST_ROOT/assetbundles.ext4"
 
 MNT="/mnt/lwcompat-assetbundles"
 
+# The helper binds the image's Cache directory over the launcher's Cache
+# directory so AssetBundles.Temp -> AssetBundles renames stay on one mount.
+IMAGE_CACHE="$MNT/Cache"
+IMAGE_BUNDLES="$IMAGE_CACHE/AssetBundles"
+
 CONFIG_DIR="/etc/lwcompat"
 CONFIG="$CONFIG_DIR/fast-asset-cache.conf"
 
@@ -57,7 +62,7 @@ done
 [[ -d "$TARGET" ]] ||
     die "AssetBundles directory not found: $TARGET"
 
-if pgrep -f '[L]astWar\.exe|[L]astWarLauncher\.exe' >/dev/null 2>&1; then
+if pgrep -x 'LastWar\.exe|LastWarLauncher' >/dev/null 2>&1; then
     die "Last War is running. Close the game and launcher first."
 fi
 
@@ -74,7 +79,8 @@ TARGET_SOURCE="$(findmnt -n -o SOURCE -T "$TARGET" 2>/dev/null || true)"
 
 FAST_ACTIVE=0
 
-if [[ "$TARGET_FS" == "ext4" && "$TARGET_SOURCE" == *"[/AssetBundles]"* ]]; then
+if [[ "$TARGET_FS" == "ext4" &&
+      ( "$TARGET_SOURCE" == *"[/Cache]"* || "$TARGET_SOURCE" == *"[/AssetBundles]"* ) ]]; then
     FAST_ACTIVE=1
     log "Existing Fast Asset Cache is currently active."
 fi
@@ -150,21 +156,31 @@ if (( FAST_ACTIVE == 0 )); then
         TEMP_MOUNTED=1
     fi
 
-    if [[ ! -d "$MNT/AssetBundles" ]]; then
-        log "Creating casefold-enabled AssetBundles directory..."
+    sudo mkdir -p "$IMAGE_CACHE"
+    sudo chown "$(id -u):$(id -g)" "$IMAGE_CACHE"
 
-        sudo mkdir -p "$MNT/AssetBundles"
-        sudo chown "$(id -u):$(id -g)" "$MNT/AssetBundles"
-        sudo chattr +F "$MNT/AssetBundles"
+    if [[ ! -d "$IMAGE_BUNDLES" && -d "$MNT/AssetBundles" ]]; then
+        log "Migrating legacy image layout to Cache-level mount..."
+        sudo mv "$MNT/AssetBundles" "$IMAGE_BUNDLES"
     fi
 
-    ATTRS="$(lsattr -d "$MNT/AssetBundles" 2>/dev/null | awk '{print $1}')"
+    for dir in AssetBundles AssetBundles.Temp warmup; do
+        if [[ ! -d "$IMAGE_CACHE/$dir" ]]; then
+            log "Creating casefold-enabled $dir directory..."
+
+            sudo mkdir "$IMAGE_CACHE/$dir"
+            sudo chown "$(id -u):$(id -g)" "$IMAGE_CACHE/$dir"
+            sudo chattr +F "$IMAGE_CACHE/$dir"
+        fi
+    done
+
+    ATTRS="$(lsattr -d "$IMAGE_BUNDLES" 2>/dev/null | awk '{print $1}')"
 
     [[ "$ATTRS" == *F* ]] ||
-        die "Casefold attribute is not active on $MNT/AssetBundles"
+        die "Casefold attribute is not active on $IMAGE_BUNDLES"
 
     FAST_COUNT="$(
-        find "$MNT/AssetBundles" \
+        find "$IMAGE_BUNDLES" \
             -maxdepth 1 \
             -type f \
             -printf '.' 2>/dev/null |
@@ -187,10 +203,10 @@ if (( FAST_ACTIVE == 0 )); then
             -a \
             --info=progress2 \
             "$TARGET/" \
-            "$MNT/AssetBundles/"
+            "$IMAGE_BUNDLES/"
 
         DEST_COUNT="$(
-            find "$MNT/AssetBundles" \
+            find "$IMAGE_BUNDLES" \
                 -maxdepth 1 \
                 -type f \
                 -printf '.' |
@@ -248,7 +264,7 @@ echo
 FINAL_FS="$(findmnt -n -o FSTYPE -T "$TARGET" 2>/dev/null || true)"
 FINAL_SOURCE="$(findmnt -n -o SOURCE -T "$TARGET" 2>/dev/null || true)"
 
-if [[ "$FINAL_FS" != "ext4" || "$FINAL_SOURCE" != *"[/AssetBundles]"* ]]; then
+if [[ "$FINAL_FS" != "ext4" || "$FINAL_SOURCE" != *"[/Cache]"* ]]; then
     die "Fast Asset Cache service started but target validation failed."
 fi
 

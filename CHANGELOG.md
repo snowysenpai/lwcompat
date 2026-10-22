@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Launcher / updates
+- Fixed endless `error decoding response body ... operation timed out` loops when a new
+  manifest is published. Wine's schannel stalls on the final TLS record of the signed
+  manifest body even though the CDN delivers it completely; LWCompat now fetches
+  `manifest/<channel>/manifests/<version>.json` and its `.sig` natively
+  (`fetch_signed_manifest.py`), validates size, Content-MD5, version, channel and
+  signature length, backs up the old manifest and lets the launcher verify the signature.
+- `update.sh` uses the same native manifest fetch in phase 1.
+- Fixed `update.sh` aborting in cleanup on unbound `UPDATE_SUCCEEDED` /
+  `FAST_CACHE_WAS_ENABLED`, which left Fast Asset Cache disabled after updates.
+- Game/launcher process checks match process names instead of command lines,
+  so unrelated commands mentioning the game path are no longer treated as a running game.
+
+### Fast Asset Cache
+- The image now binds the whole launcher `Cache` directory instead of only
+  `Cache/AssetBundles`. The launcher downloads into `Cache/AssetBundles.Temp` and renames
+  into `Cache/AssetBundles`; across filesystems that rename fails
+  (`ERROR_NOT_SAME_DEVICE`), which is why updates previously had to disable the cache.
+- Updates now run with the cache active: no root prompt, no rsync refresh.
+  The disable/refresh path remains as a fallback on bundle move failures and for the
+  legacy layout.
+- Existing images are migrated in place on service start (a rename inside the image,
+  no copy). `lwcompat-fast-cache status` shows the active `Layout`.
+
 ## 0.1.0 - 2026-09-21
 
 Initial public prototype release.

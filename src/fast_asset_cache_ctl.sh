@@ -44,8 +44,24 @@ run_root() {
     fail "Root privileges are required and neither sudo nor pkexec is available."
 }
 
+# Prints "cache" (whole Cache dir bound, current layout), "legacy"
+# (AssetBundles-only bind) or nothing when the image is not mounted.
+mount_layout() {
+    local fs src
+
+    fs="$(findmnt -n -o FSTYPE -T "$1" 2>/dev/null || true)"
+    src="$(findmnt -n -o SOURCE -T "$1" 2>/dev/null || true)"
+
+    [[ "$fs" == "ext4" ]] || return 0
+
+    case "$src" in
+        *"[/Cache]"*) echo cache ;;
+        *"[/AssetBundles]"*) echo legacy ;;
+    esac
+}
+
 game_running() {
-    pgrep -f '[L]astWar\.exe|[L]astWarLauncher\.exe' >/dev/null 2>&1
+    pgrep -x 'LastWar\.exe|LastWarLauncher' >/dev/null 2>&1
 }
 
 require_installation() {
@@ -90,7 +106,11 @@ show_status() {
     echo "FS      : ${fs:-unknown}"
     echo "Source  : ${src:-unknown}"
 
-    if [[ "$fs" == "ext4" && "$src" == *"[/AssetBundles]"* ]]; then
+    local layout
+    layout="$(mount_layout "$TARGET")"
+
+    if [[ -n "$layout" ]]; then
+        echo "Layout  : $layout"
         echo "Status  : ACTIVE"
     else
         echo "Status  : DISABLED / FALLBACK"
@@ -104,25 +124,26 @@ enable_cache() {
         fail "Last War is running. Close the game before enabling Fast Asset Cache."
     fi
 
-    if systemctl is-active --quiet "$SERVICE" &&
-       systemctl is-enabled --quiet "$SERVICE"; then
-        say "Fast Asset Cache is already enabled."
-        show_status
-        return 0
-    fi
-
-    say "Enabling Fast Asset Cache..."
-
-    run_root "$SYSTEMCTL" enable --now "$SERVICE"
-
     # shellcheck disable=SC1090
     source "$CONFIG"
 
-    local fs src
-    fs="$(findmnt -n -o FSTYPE -T "$TARGET" 2>/dev/null || true)"
-    src="$(findmnt -n -o SOURCE -T "$TARGET" 2>/dev/null || true)"
+    if systemctl is-active --quiet "$SERVICE" &&
+       systemctl is-enabled --quiet "$SERVICE"; then
+        if [[ "$(mount_layout "$TARGET")" == "legacy" ]]; then
+            say "Upgrading Fast Asset Cache to Cache-level mount..."
+            run_root "$SYSTEMCTL" restart "$SERVICE"
+        else
+            say "Fast Asset Cache is already enabled."
+            show_status
+            return 0
+        fi
+    else
+        say "Enabling Fast Asset Cache..."
 
-    if [[ "$fs" != "ext4" || "$src" != *"[/AssetBundles]"* ]]; then
+        run_root "$SYSTEMCTL" enable --now "$SERVICE"
+    fi
+
+    if [[ -z "$(mount_layout "$TARGET")" ]]; then
         fail "Service started, but Fast Asset Cache mount validation failed."
     fi
 

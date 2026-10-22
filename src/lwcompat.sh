@@ -6,6 +6,7 @@ CONFIG="$APP_DIR/config.sh"
 LOG_DIR="$APP_DIR/logs"
 UPDATE="$APP_DIR/update.sh"
 CONNECT_PROXY="$APP_DIR/connect_proxy.py"
+MANIFEST_FETCH="$APP_DIR/fetch_signed_manifest.py"
 CONNECT_LOG="$LOG_DIR/connect.log"
 CONNECT_PID=""
 
@@ -176,7 +177,8 @@ FAST_CACHE_SOURCE="$(
 )"
 
 if [[ "$FAST_CACHE_FSTYPE" == "ext4" &&
-      "$FAST_CACHE_SOURCE" == *"[/AssetBundles]"*
+      ( "$FAST_CACHE_SOURCE" == *"[/Cache]"* ||
+        "$FAST_CACHE_SOURCE" == *"[/AssetBundles]"* )
 ]]
 then
     log "Fast Asset Cache: ACTIVE"
@@ -321,6 +323,16 @@ launch_clean() {
             return 20
         fi
 
+        # Wine schannel can stall on the last TLS record of the signed
+        # remote manifest; it is fetched natively by fetch_signed_manifest.
+        if grep -Fq \
+            'Failed to load remote manifest' \
+            "$LAUNCHER_LOG" 2>/dev/null
+        then
+            log "Remote manifest download stalled inside Wine."
+            return 21
+        fi
+
         # Transient Last War launcher networking problem.
         if grep -Eq \
             'Failed to get remote .* version info|Failed to load remote manifest|Failed to download zip manifest|NetSpeedError|error decoding response body|operation timed out|source: TimedOut|Launcher error:' \
@@ -342,12 +354,33 @@ launch_clean() {
     return 32
 }
 
+
+fetch_signed_manifest() {
+    [[ -f "$MANIFEST_FETCH" ]] || {
+        log "Native manifest fetcher missing: $MANIFEST_FETCH"
+        return 1
+    }
+
+    env \
+        -u HTTPS_PROXY \
+        -u https_proxy \
+        -u HTTP_PROXY \
+        -u http_proxy \
+        -u ALL_PROXY \
+        -u all_proxy \
+        python3 "$MANIFEST_FETCH" \
+        --game-dir "$GAME_DIR" \
+        --launcher-log "$LAUNCHER_LOG" \
+        --backup-dir "$APP_DIR/backups/manifests"
+}
+
 log "LWCompat v0.2.3 starting..."
 log "Wine prefix : $PREFIX"
 log "Proton      : $PROTON"
 
 MAX_LAUNCH_ATTEMPTS=20
 UPDATE_ALREADY_RAN=0
+MANIFEST_FETCHES=0
 LAUNCH_OK=0
 
 # Runtime gameplay/launcher path stays direct.
@@ -380,6 +413,22 @@ for ATTEMPT in $(seq 1 "$MAX_LAUNCH_ATTEMPTS"); do
             UPDATE_ALREADY_RAN=1
 
             log "Updater finished; returning to direct launcher."
+            sleep 1
+            ;;
+
+        21)
+            stop_prefix
+            stop_connect_proxy
+
+            MANIFEST_FETCHES=$((MANIFEST_FETCHES + 1))
+
+            if (( MANIFEST_FETCHES <= 3 )) && fetch_signed_manifest; then
+                log "Signed manifest installed natively; retrying launcher..."
+            else
+                log "Temporary Last War metadata timeout."
+                log "Retrying launcher directly..."
+            fi
+
             sleep 1
             ;;
 
@@ -430,9 +479,7 @@ unset NO_PROXY no_proxy
 wait "$UMU_PID"
 EXIT_CODE=$?
 
-while \
-    pgrep -f '[L]astWarLauncher\.exe' >/dev/null 2>&1 || \
-    pgrep -f '[L]astWar\.exe' >/dev/null 2>&1
+while pgrep -x 'LastWar\.exe|LastWarLauncher' >/dev/null 2>&1
 do
     sleep 1
 done
