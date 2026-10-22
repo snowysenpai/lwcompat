@@ -151,6 +151,16 @@ run_preflight() {
         warn "GUI will fall back to the script launcher unless a prebuilt binary is provided."
     fi
 
+    if command -v cmake >/dev/null 2>&1 &&
+       command -v ninja >/dev/null 2>&1 &&
+       [[ -f "$ROOT_DIR/hud-spike/vendor/imgui/imgui.cpp" ]]
+    then
+        say "Custom HUD build     : OK (cmake + ninja)"
+    else
+        say "Custom HUD build     : unavailable (needs cmake, ninja, Vulkan headers"
+        say "                       and 'git submodule update --init'); HUD stays optional"
+    fi
+
     if (( ${#MISSING_ICON[@]} == 0 )); then
         say "Icon extraction      : OK"
     else
@@ -316,6 +326,7 @@ install -m 0755 "$ROOT_DIR/src/bootstrap_client.py" "$APP_DIR/bootstrap_client.p
 install -m 0755 "$ROOT_DIR/src/bootstrap.sh" "$APP_DIR/bootstrap.sh"
 install -m 0755 "$ROOT_DIR/src/update.sh" "$APP_DIR/update.sh"
 install -m 0755 "$ROOT_DIR/src/fetch_signed_manifest.py" "$APP_DIR/fetch_signed_manifest.py"
+install -m 0755 "$ROOT_DIR/src/network_feed.py" "$APP_DIR/network_feed.py"
 install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
 install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 
@@ -429,6 +440,46 @@ install_gui() {
 }
 
 install_gui
+
+# Optional custom Vulkan HUD layer. Enabled per user with
+# LWCOMPAT_CUSTOM_HUD=1 in ~/.config/lwcompat/settings.conf.
+install_hud() {
+    local src="$ROOT_DIR/hud-spike"
+    local build="$src/build"
+    local hud_dir="$APP_DIR/hud"
+    local manifest="$hud_dir/VK_LAYER_LWCOMPAT_hud_spike.json"
+
+    if [[ ! -f "$src/vendor/imgui/imgui.cpp" ]]; then
+        say "Custom HUD: imgui submodule missing; skipping (git submodule update --init)."
+        return 0
+    fi
+
+    if ! command -v cmake >/dev/null 2>&1 || ! command -v ninja >/dev/null 2>&1; then
+        say "Custom HUD: cmake/ninja not found; skipping."
+        return 0
+    fi
+
+    say "Building custom Vulkan HUD layer..."
+
+    if ! cmake -S "$src" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release >/dev/null ||
+       ! ninja -C "$build" >/dev/null
+    then
+        say "Custom HUD build failed; skipping."
+        return 0
+    fi
+
+    mkdir -p "$hud_dir"
+    install -m 0755 "$build/liblwcompat_hud_spike.so" "$hud_dir/liblwcompat_hud_spike.so"
+
+    # library_path is resolved relative to the manifest by the Vulkan loader.
+    sed 's#"library_path": *"[^"]*"#"library_path": "./liblwcompat_hud_spike.so"#' \
+        "$build/VK_LAYER_LWCOMPAT_hud_spike.json" > "$manifest.tmp"
+    mv -f "$manifest.tmp" "$manifest"
+
+    say "Custom HUD installed (enable with LWCOMPAT_CUSTOM_HUD=1)."
+}
+
+install_hud
 
 ICON_VALUE="applications-games"
 CUSTOM_ICON="$ICONS_DIR/lastwar-lwcompat.png"

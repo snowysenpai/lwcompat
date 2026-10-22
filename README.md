@@ -118,7 +118,7 @@ sudo apt install python3 util-linux procps libnotify-bin icoutils imagemagick rs
 Clone the repository and optionally run the dependency/environment preflight first:
 
 ```bash
-git clone https://github.com/snowysenpai/lwcompat.git
+git clone --recurse-submodules https://github.com/snowysenpai/lwcompat.git
 cd lwcompat
 
 chmod +x install.sh uninstall.sh
@@ -188,6 +188,21 @@ lwcompat-overlay hud off
 ```
 
 Overlay settings are applied to the next game launch. GUI overlay controls are disabled while Last War is running.
+
+### Custom Vulkan HUD (optional)
+
+`hud-spike/` contains LWCompat's own Vulkan layer (Dear ImGui, vendored as a git
+submodule) that shows network latency from `network_feed.py`. The installer builds it
+when `cmake`, `ninja` and the Vulkan headers are available. It is off by default; enable
+it in `~/.config/lwcompat/settings.conf`:
+
+```text
+LWCOMPAT_CUSTOM_HUD=1
+```
+
+If the layer files are missing or invalid, LWCompat logs
+`Custom Vulkan HUD: UNAVAILABLE` and starts the game without it. An existing checkout
+without the submodule can fetch it with `git submodule update --init`.
 
 ## Live and Developer builds
 
@@ -364,12 +379,18 @@ Original AssetBundles
 ext4 casefold image
         |
         v
-/mnt/lwcompat-assetbundles
+/mnt/lwcompat-assetbundles/Cache
         |
         | bind mount
         v
-Game Cache/AssetBundles
+Game Cache/   (AssetBundles, AssetBundles.Temp, warmup)
 ```
+
+The whole `Cache` directory is bound, not only `AssetBundles`: the launcher downloads
+into `Cache/AssetBundles.Temp` and renames into `Cache/AssetBundles`, and a rename across
+filesystems fails under Wine (`ERROR_NOT_SAME_DEVICE`). With both on one mount, updates
+run with the cache active. Images created with the older AssetBundles-only layout are
+migrated in place the next time the service starts.
 
 The original host filesystem directory is left in place underneath the bind mount.
 
@@ -535,27 +556,20 @@ A healthy Fast Asset Cache launch reports:
 
 ## Troubleshooting
 
-### `Checking data table` -> `error decoding response body`
+### `error decoding response body` / `operation timed out`
 
-Check that both bridge ports are listening:
+Under Wine, the launcher's schannel TLS stack can stall on the final TLS record of a
+response body even though the server sent it completely; the launcher gives up after
+5 seconds. Most downloads succeed on retry. The signed remote manifest fails every time,
+so when `Launcher.log` shows `Failed to load remote manifest` LWCompat fetches
+`manifest/<channel>/manifests/<version>.json` and `.sig` natively and installs them
+(previous manifest backed up under `~/.local/share/lwcompat/backups/manifests/`).
 
-```bash
-ss -ltn '( sport = :18080 or sport = :18081 )'
-```
-
-Both:
-
-```text
-127.0.0.1:18080
-127.0.0.1:18081
-```
-
-should be present while LWCompat is running.
-
-Then inspect:
+Check what happened:
 
 ```bash
-tail -n 100 ~/.local/share/lwcompat/logs/proxy.log
+grep -E 'Remote manifest|Failed to load|LWCompat manifest' \
+  ~/.local/share/lwcompat/logs/lwcompat.log | tail -n 20
 ```
 
 ### Check Fast Asset Cache

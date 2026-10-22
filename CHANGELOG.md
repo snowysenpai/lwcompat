@@ -15,6 +15,16 @@
 - Game/launcher process checks match process names instead of command lines,
   so unrelated commands mentioning the game path are no longer treated as a running game.
 
+### Custom Vulkan HUD
+- Added the HUD layer sources (`hud-spike/`) with Dear ImGui v1.91.9b as a git submodule;
+  a clean build is byte-identical to the previously installed layer.
+- The installer builds and installs the layer and writes a manifest with a relative
+  `library_path`. The installed manifest had been empty since 2026-09-24, so the layer
+  was silently never loaded.
+- HUD is optional (`LWCOMPAT_CUSTOM_HUD=1`, default off) and a missing or invalid layer
+  no longer aborts the launch.
+- `network_feed.py` (formerly the untracked `mangohud_net.py`) is installed by the installer.
+
 ### Fast Asset Cache
 - The image now binds the whole launcher `Cache` directory instead of only
   `Cache/AssetBundles`. The launcher downloads into `Cache/AssetBundles.Temp` and renames

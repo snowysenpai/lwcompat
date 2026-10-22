@@ -10,6 +10,14 @@ MANIFEST_FETCH="$APP_DIR/fetch_signed_manifest.py"
 CONNECT_LOG="$LOG_DIR/connect.log"
 CONNECT_PID=""
 
+HUD_DIR="$APP_DIR/hud"
+HUD_LAYER_NAME="VK_LAYER_LWCOMPAT_hud_spike"
+HUD_MANIFEST="$HUD_DIR/VK_LAYER_LWCOMPAT_hud_spike.json"
+HUD_LIBRARY="$HUD_DIR/liblwcompat_hud_spike.so"
+HUD_FEED="$APP_DIR/network_feed.py"
+HUD_LOG="$LOG_DIR/hud-network.log"
+HUD_FEED_PID=""
+
 mkdir -p "$LOG_DIR"
 
 log() {
@@ -114,6 +122,7 @@ SETTINGS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/lwcompat/settings.conf"
 
 LWCOMPAT_FPS=0
 LWCOMPAT_HUD=0
+LWCOMPAT_CUSTOM_HUD=0
 
 if [[ -r "$SETTINGS_FILE" ]]; then
     # shellcheck disable=SC1090
@@ -122,6 +131,7 @@ fi
 
 [[ "$LWCOMPAT_FPS" == "1" ]] || LWCOMPAT_FPS=0
 [[ "$LWCOMPAT_HUD" == "1" ]] || LWCOMPAT_HUD=0
+[[ "$LWCOMPAT_CUSTOM_HUD" == "1" ]] || LWCOMPAT_CUSTOM_HUD=0
 
 if [[ "${LWCOMPAT_DEVELOPER:-0}" == "1" ]]; then
     export DXVK_HUD="full"
@@ -258,8 +268,75 @@ start_connect_proxy() {
 }
 
 
+stop_hud() {
+    if [[ -n "${HUD_FEED_PID:-}" ]] &&
+       kill -0 "$HUD_FEED_PID" 2>/dev/null
+    then
+        kill "$HUD_FEED_PID" 2>/dev/null || true
+
+        for _ in {1..20}; do
+            kill -0 "$HUD_FEED_PID" 2>/dev/null || break
+            sleep 0.1
+        done
+
+        kill -9 "$HUD_FEED_PID" 2>/dev/null || true
+        wait "$HUD_FEED_PID" 2>/dev/null || true
+    fi
+
+    HUD_FEED_PID=""
+}
+
+
+# Custom Vulkan HUD layer plus its network feed. Optional: any problem
+# disables the HUD for this session instead of blocking the game.
+start_hud() {
+    # A truncated manifest makes the Vulkan loader skip the layer silently.
+    grep -q '"library_path"' "$HUD_MANIFEST" 2>/dev/null || {
+        log "HUD manifest missing or invalid: $HUD_MANIFEST"
+        return 1
+    }
+
+    [[ -r "$HUD_LIBRARY" ]] || {
+        log "HUD library missing: $HUD_LIBRARY"
+        return 1
+    }
+
+    [[ -f "$HUD_FEED" ]] || {
+        log "HUD network feed missing: $HUD_FEED"
+        return 1
+    }
+
+    : > "$HUD_LOG"
+
+    python3 "$HUD_FEED" --interval 0.75 >>"$HUD_LOG" 2>&1 &
+
+    HUD_FEED_PID=$!
+
+    sleep 0.2
+
+    if ! kill -0 "$HUD_FEED_PID" 2>/dev/null; then
+        log "HUD network feed failed to start."
+        tail -30 "$HUD_LOG" >&2 || true
+        HUD_FEED_PID=""
+        return 1
+    fi
+
+    # Exported here so UMU/Proton discover the explicit layer at startup.
+    export VK_LAYER_PATH="$HUD_DIR"
+    export VK_INSTANCE_LAYERS="$HUD_LAYER_NAME"
+
+    unset MANGOHUD
+    unset MANGOHUD_CONFIG
+    unset MANGOHUD_CONFIGFILE
+
+    log "Custom Vulkan HUD: ACTIVE"
+    log "HUD network feed: ACTIVE (PID $HUD_FEED_PID)"
+}
+
+
 runtime_cleanup() {
     stop_connect_proxy
+    stop_hud
 }
 
 trap runtime_cleanup EXIT INT TERM
@@ -386,6 +463,16 @@ LAUNCH_OK=0
 # Runtime gameplay/launcher path stays direct.
 # 18083 is reserved for the updater only.
 stop_connect_proxy
+
+if [[ "$LWCOMPAT_CUSTOM_HUD" == "1" ]]; then
+    if ! start_hud; then
+        stop_hud
+        unset VK_LAYER_PATH VK_INSTANCE_LAYERS
+        log "Custom Vulkan HUD: UNAVAILABLE (continuing without it)"
+    fi
+else
+    log "Custom Vulkan HUD: OFF"
+fi
 
 for ATTEMPT in $(seq 1 "$MAX_LAUNCH_ATTEMPTS"); do
     log "Launcher attempt $ATTEMPT/$MAX_LAUNCH_ATTEMPTS"
