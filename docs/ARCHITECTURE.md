@@ -34,8 +34,10 @@ by `tests/test_launcher_log.sh`.
 ### `fetch_signed_manifest.py`
 
 Downloads `<manifest_url>/manifest/<channel>/manifests/<version>.json` and its `.sig` on the
-host, validates size, Content-MD5, version, channel and signature length, backs up the old
-manifest and installs the new one atomically. The launcher verifies the signature itself.
+host, validates size, Content-MD5, version, channel and the Ed25519 signature, backs up
+the old manifest and installs the new one atomically. The signature key is located at run
+time inside the user's installed launcher (using the manifest/signature pair it already
+accepted) and cached per launcher build; nothing key-related is shipped with LWCompat.
 Needed because Wine before 11.6 stalls on this download (see
 `tools/wine-schannel-repro/`).
 

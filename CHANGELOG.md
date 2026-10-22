@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `fetch_signed_manifest.py` verifies the manifest's Ed25519 signature before installing it.
+  The public key is not shipped: it is located inside the user's installed launcher using
+  the manifest/signature pair the launcher already accepted, and cached per launcher build.
+  A manifest that fails verification is not installed; if no key can be found the check is
+  skipped with a warning.
 - Updates no longer launch the game twice: the updater's final resource sync runs without
   the relay, and when it starts the game LWCompat keeps that session instead of killing it
   and relaunching (`LWCOMPAT_UPDATE_RELAY=1` restores the old behaviour). Manual

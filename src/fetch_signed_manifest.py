@@ -9,8 +9,14 @@ the CDN delivered the whole file.
 This helper reads the remote version the launcher already resolved from
 Launcher.log, downloads <base>/manifest/<channel>/manifests/<version>.json
 and its .sig with normal TLS verification, validates them and installs them
-as manifest.json / manifest.json.sig. The launcher still verifies the
-signature itself; this only replaces the download step.
+as manifest.json / manifest.json.sig.
+
+Before installing, the Ed25519 signature is checked with the launcher's own
+public key. The key is not shipped with LWCompat: it is located inside the
+installed LastWarLauncher.exe by finding the 32 bytes that verify the
+manifest/signature pair the launcher already accepted, and cached per
+launcher build. If the key cannot be determined (or libcrypto is missing)
+the check is skipped with a warning and the launcher remains the verifier.
 
 Exit codes:
     0  newer signed manifest installed
@@ -20,6 +26,8 @@ Exit codes:
 
 import argparse
 import base64
+import ctypes
+import ctypes.util
 import hashlib
 import json
 import os
@@ -35,6 +43,10 @@ REMOTE_RE = re.compile(
     r"Remote manifest version:\s*([^,\s]+),(\d+),([0-9a-fA-F]*),(\d+)"
 )
 SIG_SIZE = 64
+# String the launcher keeps next to its manifest public key.
+KEY_ANCHOR = b"configured manifest public key"
+KEY_SEARCH_RADIUS = 512 * 1024
+EVP_PKEY_ED25519 = 1087
 
 
 def log(message):
@@ -100,6 +112,89 @@ def fetch(url, retries=3):
     raise RuntimeError(f"{url}: {last}")
 
 
+def load_libcrypto():
+    name = ctypes.util.find_library("crypto") or "libcrypto.so.3"
+    try:
+        lib = ctypes.CDLL(name)
+    except OSError:
+        return None
+
+    lib.EVP_PKEY_new_raw_public_key.restype = ctypes.c_void_p
+    lib.EVP_PKEY_new_raw_public_key.argtypes = [
+        ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
+    lib.EVP_MD_CTX_new.restype = ctypes.c_void_p
+    lib.EVP_MD_CTX_free.argtypes = [ctypes.c_void_p]
+    lib.EVP_PKEY_free.argtypes = [ctypes.c_void_p]
+    lib.EVP_DigestVerifyInit.argtypes = [ctypes.c_void_p] * 5
+    lib.EVP_DigestVerify.argtypes = [
+        ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t]
+    return lib
+
+
+def ed25519_verify(lib, key, message, signature):
+    pkey = lib.EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, None, key, len(key))
+    if not pkey:
+        return False
+
+    ctx = lib.EVP_MD_CTX_new()
+    try:
+        return (lib.EVP_DigestVerifyInit(ctx, None, None, None, pkey) == 1 and
+                lib.EVP_DigestVerify(ctx, signature, len(signature), message, len(message)) == 1)
+    finally:
+        lib.EVP_MD_CTX_free(ctx)
+        lib.EVP_PKEY_free(pkey)
+
+
+def find_launcher_key(lib, launcher, message, signature, cache_dir):
+    """Locate the launcher's manifest key using a pair it already accepted."""
+    data = launcher.read_bytes()
+    cache = cache_dir / f"manifest-key-{hashlib.sha256(data).hexdigest()[:16]}.hex"
+
+    if cache.is_file():
+        key = bytes.fromhex(cache.read_text().strip())
+        if ed25519_verify(lib, key, message, signature):
+            return key
+
+    anchor = data.find(KEY_ANCHOR)
+    if anchor < 0:
+        return None
+
+    # The key sits right next to the anchor in known builds; search outward.
+    for distance in range(KEY_SEARCH_RADIUS):
+        for offset in (anchor - distance, anchor + distance):
+            if offset < 0 or offset + 32 > len(data):
+                continue
+            key = data[offset:offset + 32]
+            if key.count(key[0]) > 24:
+                continue
+            if ed25519_verify(lib, key, message, signature):
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                cache.write_text(key.hex() + "\n")
+                return key
+
+    return None
+
+
+def check_signature(launcher, manifest, signature, body, sig):
+    """True/False when the signature could be checked, None when skipped."""
+    lib = load_libcrypto()
+    if lib is None:
+        log("WARNING: libcrypto not available; leaving signature check to the launcher")
+        return None
+
+    if not (launcher.is_file() and manifest.is_file() and signature.is_file()):
+        log("WARNING: no accepted local manifest to locate the key; skipping signature check")
+        return None
+
+    cache_dir = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "lwcompat"
+    key = find_launcher_key(lib, launcher, manifest.read_bytes(), signature.read_bytes(), cache_dir)
+    if key is None:
+        log("WARNING: launcher manifest key not found; skipping signature check")
+        return None
+
+    return ed25519_verify(lib, key, body, sig)
+
+
 def write_atomic(path, data):
     tmp = path.with_name(path.name + ".lwcompat-tmp")
     tmp.write_bytes(data)
@@ -112,6 +207,7 @@ def main():
     parser.add_argument("--launcher-log", required=True)
     parser.add_argument("--backup-dir", required=True)
     parser.add_argument("--base", default=DEFAULT_BASE)
+    parser.add_argument("--launcher", help="defaults to <game-dir>/LastWarLauncher.exe")
     args = parser.parse_args()
 
     game_dir = Path(args.game_dir)
@@ -158,6 +254,15 @@ def main():
     except Exception as exc:
         log(f"ERROR: {exc}")
         return 1
+
+    launcher = Path(args.launcher) if args.launcher else game_dir / "LastWarLauncher.exe"
+    verified = check_signature(launcher, manifest, signature, body, sig)
+
+    if verified is False:
+        log("ERROR: manifest signature does not verify with the launcher's key; not installing")
+        return 1
+    if verified:
+        log("signature verified with the launcher's key")
 
     backup = Path(args.backup_dir) / time.strftime(f"manifest-{current}-%Y%m%d-%H%M%S")
     backup.mkdir(parents=True, exist_ok=True)

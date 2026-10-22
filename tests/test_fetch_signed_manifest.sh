@@ -70,4 +70,49 @@ serve_manifest 1101 beta 64; reset_game; write_log "$(size)"
 assert_eq 1 "$(run_helper)" "manifest channel differs -> error"
 assert_eq 1093 "$(local_version)" "  ... local manifest untouched"
 
+# 6-8. Ed25519 signature check with a key located inside the launcher.
+# A synthetic key and fake launcher are generated here; no real key is stored.
+if command -v openssl >/dev/null 2>&1; then
+    openssl genpkey -algorithm ed25519 -out "$T/good.pem" 2>/dev/null
+    openssl genpkey -algorithm ed25519 -out "$T/evil.pem" 2>/dev/null
+    { head -c 4096 /dev/urandom
+      openssl pkey -in "$T/good.pem" -pubout -outform DER 2>/dev/null | tail -c 32
+      printf '+configured manifest public key is invalid: '
+      head -c 4096 /dev/urandom; } > "$T/LastWarLauncher.exe"
+    head -c 8192 /dev/urandom > "$T/NoKeyLauncher.exe"
+
+    sign() { openssl pkeyutl -sign -inkey "$1" -rawin -in "$2" -out "$3" 2>/dev/null; }
+
+    run_signed() {  # launcher
+        XDG_CACHE_HOME="$T/cache" python3 -I "$HELPER" --game-dir "$T/game" \
+            --launcher-log "$T/Launcher.log" --backup-dir "$T/backups" \
+            --base "http://127.0.0.1:$PORT" --launcher "$1" > "$T/helper.out" 2>&1
+        echo $?
+    }
+
+    signed_setup() {  # key used for the served manifest
+        serve_manifest 1101 all 64
+        sign "$1" "$T/srv/manifest/all/manifests/1101.json" "$T/srv/manifest/all/manifests/1101.json.sig"
+        reset_game
+        sign "$T/good.pem" "$T/game/manifest.json" "$T/game/manifest.json.sig"   # accepted pair
+        write_log "$(size)"
+        rm -rf "$T/cache"
+    }
+
+    signed_setup "$T/good.pem"
+    assert_eq 0 "$(run_signed "$T/LastWarLauncher.exe")" "valid signature with the launcher's key installs"
+    grep -q 'signature verified' "$T/helper.out" && pass "  ... signature was checked" || fail "signature checked"
+    ls "$T/cache/lwcompat"/manifest-key-*.hex >/dev/null 2>&1 && pass "  ... key cached per launcher" || fail "key cache"
+
+    signed_setup "$T/evil.pem"
+    assert_eq 1 "$(run_signed "$T/LastWarLauncher.exe")" "manifest signed by another key is rejected"
+    assert_eq 1093 "$(local_version)" "  ... local manifest untouched"
+
+    signed_setup "$T/good.pem"
+    assert_eq 0 "$(run_signed "$T/NoKeyLauncher.exe")" "launcher without a findable key falls back to installing"
+    grep -q 'WARNING: launcher manifest key not found' "$T/helper.out" && pass "  ... with a warning" || fail "fallback warning"
+else
+    echo "  skip  openssl not installed (signature tests)"
+fi
+
 finish
