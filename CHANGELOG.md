@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- GUI overlay row: separate `DXVK HUD` and `LWCOMPAT HUD` switches, plus an experimental
+  `WAYLAND` switch (`lwcompat-overlay wayland on`) that runs Wine's native Wayland driver;
+  meant for click offsets in windowed mode under XWayland. The launch log shows the driver.
+- `lwcompat-overlay` keeps unknown keys in `settings.conf`.
+
 - Player names using Unified Canadian Aboriginal Syllabics (e.g. `ᘮ`) showed as boxes:
   Windows renders them with Gadugi/Euphemia, which the Proton prefix lacks. Before each
   launch `prefix_fonts.sh` copies the host's Noto Sans Canadian Aboriginal into the prefix

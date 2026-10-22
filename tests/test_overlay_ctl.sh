@@ -25,5 +25,12 @@ grep -qx 'HUD : ON' <<<"$out" && pass "old file: DXVK HUD read" || fail "old fil
 grep -qx 'CUSTOM HUD : OFF' <<<"$out" && pass "old file: custom HUD defaults to off" || fail "old file: custom default"
 grep -qx 'FPS : OFF' <<<"$out" && pass "status lines keep the format the GUI matches" || fail "status format"
 
+ctl wayland on >/dev/null
+assert_eq 1 "$(val LWCOMPAT_WAYLAND)" "wayland switch"
+echo 'LWCOMPAT_SOMETHING_NEW=42' >> "$T/lwcompat/settings.conf"
+ctl fps toggle >/dev/null
+assert_eq 42 "$(val LWCOMPAT_SOMETHING_NEW)" "unknown keys survive a change"
+assert_eq 1 "$(grep -c '^LWCOMPAT_FPS=' "$T/lwcompat/settings.conf")" "known keys are not duplicated"
+
 ctl custom bogus >/dev/null 2>&1 && fail "invalid state accepted" || pass "invalid state rejected"
 finish

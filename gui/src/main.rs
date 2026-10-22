@@ -38,6 +38,8 @@ struct LWCompat {
 
     fps_overlay: bool,
     hud_overlay: bool,
+    custom_hud: bool,
+    wayland: bool,
     overlay_error: bool,
     last_overlay_refresh: Instant,
 
@@ -69,6 +71,8 @@ impl LWCompat {
 
             fps_overlay: false,
             hud_overlay: false,
+            custom_hud: false,
+            wayland: false,
             overlay_error: false,
             last_overlay_refresh:
                 Instant::now() - Duration::from_secs(5),
@@ -313,6 +317,16 @@ impl LWCompat {
                 self.hud_overlay =
                     text.lines().any(|line| {
                         line.trim() == "HUD : ON"
+                    });
+
+                self.custom_hud =
+                    text.lines().any(|line| {
+                        line.trim() == "CUSTOM HUD : ON"
+                    });
+
+                self.wayland =
+                    text.lines().any(|line| {
+                        line.trim() == "WAYLAND : ON"
                     });
 
                 self.overlay_error =
@@ -729,20 +743,20 @@ impl LWCompat {
     ) {
         let controls_enabled = !self.running;
 
-        let fps_color = if self.fps_overlay {
-            GREEN
-        } else {
-            egui::Color32::GRAY
-        };
+        // (overlay_ctl target, label, current state, hover text)
+        let toggles = [
+            ("fps", "FPS", self.fps_overlay, "DXVK FPS counter"),
+            ("hud", "DXVK HUD", self.hud_overlay, "DXVK performance HUD"),
+            ("custom", "LWCOMPAT HUD", self.custom_hud, "LWCompat network/FPS HUD"),
+            (
+                "wayland",
+                "WAYLAND",
+                self.wayland,
+                "Experimental: Wine's native Wayland driver. Try it if clicks are offset in windowed mode.",
+            ),
+        ];
 
-        let hud_color = if self.hud_overlay {
-            GREEN
-        } else {
-            egui::Color32::GRAY
-        };
-
-        let mut fps_clicked = false;
-        let mut hud_clicked = false;
+        let mut clicked = None;
 
         ui.horizontal(|ui| {
             ui.label(
@@ -754,47 +768,26 @@ impl LWCompat {
 
             ui.add_space(8.0);
 
-            fps_clicked = ui
-                .add_enabled(
-                    controls_enabled,
-                    egui::Button::new(
-                        egui::RichText::new(
-                            if self.fps_overlay {
-                                "FPS  ON"
-                            } else {
-                                "FPS  OFF"
-                            },
-                        )
-                        .size(10.5)
-                        .strong()
-                        .color(fps_color),
-                    )
-                    .min_size(
-                        egui::vec2(92.0, 28.0),
-                    ),
-                )
-                .clicked();
+            for (target, label, on, hover) in toggles {
+                let text = format!("{label}  {}", if on { "ON" } else { "OFF" });
 
-            hud_clicked = ui
-                .add_enabled(
-                    controls_enabled,
-                    egui::Button::new(
-                        egui::RichText::new(
-                            if self.hud_overlay {
-                                "HUD  ON"
-                            } else {
-                                "HUD  OFF"
-                            },
+                let response = ui
+                    .add_enabled(
+                        controls_enabled,
+                        egui::Button::new(
+                            egui::RichText::new(text)
+                                .size(10.5)
+                                .strong()
+                                .color(if on { GREEN } else { egui::Color32::GRAY }),
                         )
-                        .size(10.5)
-                        .strong()
-                        .color(hud_color),
+                        .min_size(egui::vec2(92.0, 28.0)),
                     )
-                    .min_size(
-                        egui::vec2(92.0, 28.0),
-                    ),
-                )
-                .clicked();
+                    .on_hover_text(hover);
+
+                if response.clicked() {
+                    clicked = Some(target);
+                }
+            }
 
             if self.running {
                 ui.label(
@@ -834,12 +827,8 @@ impl LWCompat {
             );
         });
 
-        if fps_clicked {
-            self.toggle_overlay("fps");
-        }
-
-        if hud_clicked {
-            self.toggle_overlay("hud");
+        if let Some(target) = clicked {
+            self.toggle_overlay(target);
         }
     }
 
@@ -963,9 +952,9 @@ impl LWCompat {
 
                         let hud_text =
                             if self.hud_overlay {
-                                "HUD  ON"
+                                "DXVK HUD  ON"
                             } else {
-                                "HUD  OFF"
+                                "DXVK HUD  OFF"
                             };
 
                         let hud_color =

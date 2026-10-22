@@ -157,6 +157,7 @@ SETTINGS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/lwcompat/settings.conf"
 LWCOMPAT_FPS=0
 LWCOMPAT_HUD=0
 LWCOMPAT_CUSTOM_HUD=0
+LWCOMPAT_WAYLAND=0
 
 if [[ -r "$SETTINGS_FILE" ]]; then
     # shellcheck disable=SC1090
@@ -166,6 +167,18 @@ fi
 [[ "$LWCOMPAT_FPS" == "1" ]] || LWCOMPAT_FPS=0
 [[ "$LWCOMPAT_HUD" == "1" ]] || LWCOMPAT_HUD=0
 [[ "$LWCOMPAT_CUSTOM_HUD" == "1" ]] || LWCOMPAT_CUSTOM_HUD=0
+[[ "$LWCOMPAT_WAYLAND" == "1" ]] || LWCOMPAT_WAYLAND=0
+
+# Wine's native Wayland driver (experimental). Under XWayland, windowed
+# Unity games can map clicks with an offset after the compositor resizes
+# the window; winewayland sizes the window itself.
+if [[ "$LWCOMPAT_WAYLAND" == "1" && -n "${WAYLAND_DISPLAY:-}" ]]; then
+    export PROTON_ENABLE_WAYLAND=1
+    log "Display driver : Wayland (winewayland)"
+else
+    unset PROTON_ENABLE_WAYLAND PROTON_USE_WAYLAND
+    log "Display driver : X11 (XWayland)"
+fi
 
 if [[ "${LWCOMPAT_DEVELOPER:-0}" == "1" ]]; then
     export DXVK_HUD="full"
