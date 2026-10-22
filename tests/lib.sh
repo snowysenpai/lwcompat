@@ -3,6 +3,7 @@
 set -u
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC2034  # used by the test scripts that source this file
 FIXTURES="$ROOT/tests/fixtures"
 FAILS=0
 

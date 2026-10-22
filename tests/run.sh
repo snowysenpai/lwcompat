@@ -19,7 +19,7 @@ done
 
 echo "== shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck -S error -x install.sh uninstall.sh src/*.sh tests/*.sh tools/*/*.sh &&
+    shellcheck -S warning -x install.sh uninstall.sh src/*.sh tests/*.sh tools/*/*.sh &&
         echo "  ok" || failed+=("shellcheck")
 else
     echo "  skip  shellcheck not installed"

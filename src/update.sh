@@ -34,7 +34,6 @@ UMU="$LWCOMPAT_UMU"
 PROTON="$LWCOMPAT_PROTON"
 
 LAUNCHER="$GAME_DIR/LastWarLauncher.exe"
-GAME_EXE="$GAME_DIR/Game/LastWar.exe"
 
 MANIFEST="$GAME_DIR/manifest.json"
 MANIFEST_SIG="$GAME_DIR/manifest.json.sig"
