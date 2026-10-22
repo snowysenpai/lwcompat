@@ -51,7 +51,7 @@ UPDATE_SUCCEEDED=0
 
 
 log() {
-    printf '[LWCompat update] %s\n' "$*"
+    printf '%(%H:%M:%S)T [LWCompat update] %s\n' -1 "$*"
 }
 
 

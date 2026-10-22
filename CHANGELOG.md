@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- One log file per launch under `logs/sessions/`; `logs/lwcompat.log` is a symlink to the
+  newest session, so the GUI no longer re-reads the whole history on every refresh.
+  The last 10 sessions are kept (`LWCOMPAT_KEEP_LOGS`); the old single log is archived once.
+- LWCompat, updater and manifest-fetch log lines carry a time stamp.
+
 ## 0.3.0 - 2026-10-22
 
 Version numbers are now taken from `VERSION` (launcher log, installer) and match the

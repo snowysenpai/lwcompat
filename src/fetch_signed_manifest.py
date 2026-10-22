@@ -38,7 +38,7 @@ SIG_SIZE = 64
 
 
 def log(message):
-    print(f"[LWCompat manifest] {message}", flush=True)
+    print(f"{time.strftime('%H:%M:%S')} [LWCompat manifest] {message}", flush=True)
 
 
 def remote_from_log(path):

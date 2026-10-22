@@ -528,30 +528,28 @@ When Fast Asset Cache is enabled, a small amount of system-level configuration i
 
 ## Logs
 
-Main launcher log:
+Each launch writes its own log; `lwcompat.log` always points at the newest session:
 
 ```bash
 tail -f ~/.local/share/lwcompat/logs/lwcompat.log
+ls ~/.local/share/lwcompat/logs/sessions/
 ```
 
-Bridge log:
+LWCompat lines carry a time stamp (the session file name carries the date). The last
+10 sessions are kept; change this with `LWCOMPAT_KEEP_LOGS=<n>`. An older single growing
+log is archived once as `sessions/lwcompat-legacy.log.gz`.
 
-```bash
-tail -f ~/.local/share/lwcompat/logs/proxy.log
-```
-
-A healthy version API request looks similar to:
+The official launcher writes its own log next to the game:
 
 ```text
-[API] GET /gameservice/getlsu3dversion.php?...
-[API] <- HTTP 200
-[API] streamed=...
+~/Games/LastWar/drive_c/users/steamuser/AppData/Local/FunFly/Last War-Survival Game/Launcher.log
 ```
 
-A healthy Fast Asset Cache launch reports:
+A healthy launch reports:
 
 ```text
-[LWCompat] Fast Asset Cache: ACTIVE (/dev/loop0[/AssetBundles])
+10:33:59 [LWCompat] Fast Asset Cache: ACTIVE
+10:35:12 [LWCompat] Game launch authorized by official launcher.
 ```
 
 ## Troubleshooting

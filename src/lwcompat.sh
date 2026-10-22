@@ -21,11 +21,11 @@ HUD_FEED_PID=""
 mkdir -p "$LOG_DIR"
 
 log() {
-    printf '[LWCompat] %s\n' "$*"
+    printf '%(%H:%M:%S)T [LWCompat] %s\n' -1 "$*"
 }
 
 die() {
-    printf '[LWCompat] ERROR: %s\n' "$*" >&2
+    printf '%(%H:%M:%S)T [LWCompat] ERROR: %s\n' -1 "$*" >&2
     exit 1
 }
 
