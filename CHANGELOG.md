@@ -1,27 +1,29 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-10-22
 
-- `lwcompat-profile rename OLD NEW` and a **Rename** button in the GUI account menu.
-- GUI: **ACCOUNT** menu next to PLAY for saved `lwcompat-profile` logins. Verified in game:
-  two e-mails and two characters of one e-mail switch without login codes, including a
-  profile whose token predates the last login.
-- Added `lwcompat-profile` (save/use/list/delete) to switch between saved game logins
+### Accounts
+- Added `lwcompat-profile` (save/use/list/rename/delete) to switch between saved game logins
   without e-mail codes. A profile is a copy of the few PlayerPrefs that hold the login;
   game files, Fast Asset Cache and the device identity stay shared. Profiles are stored
   0600, values are never printed, `user.reg` is backed up before each switch, and the
   active profile's refreshed tokens are saved before switching away.
-- GUI overlay row: separate `DXVK HUD` and `LWCOMPAT HUD` switches, plus an experimental
-  `WAYLAND` switch (`lwcompat-overlay wayland on`) that runs Wine's native Wayland driver;
-  meant for click offsets in windowed mode under XWayland. The launch log shows the driver.
-- `lwcompat-overlay` keeps unknown keys in `settings.conf`.
+- GUI: **ACCOUNT** menu next to PLAY with **Rename**. Verified in game: two e-mails and two
+  characters of one e-mail switch without login codes, including a profile whose token
+  predates the last login.
 
+### Game
 - Player names using Unified Canadian Aboriginal Syllabics (e.g. `ᘮ`) showed as boxes:
   Windows renders them with Gadugi/Euphemia, which the Proton prefix lacks. Before each
   launch `prefix_fonts.sh` copies the host's Noto Sans Canadian Aboriginal into the prefix
   and registers it (no-op once done; LWCompat ships no fonts).
+
+### Overlays and settings
+- GUI overlay row: separate `DXVK HUD` and `LWCOMPAT HUD` switches, plus an experimental
+  `WAYLAND` switch (`lwcompat-overlay wayland on`) for Wine's native Wayland driver. It
+  crashed the game in a first test, so it stays off by default.
 - `lwcompat-overlay` keeps every setting when one changes (toggling FPS/DXVK HUD used to
-  drop the custom HUD setting) and gained `custom` for the LWCompat Vulkan HUD.
+  drop the custom HUD setting) and leaves unknown keys in `settings.conf` alone.
 
 ## 0.4.0 - 2026-10-22
 
