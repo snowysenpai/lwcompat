@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - 2026-10-22
 
 - `fetch_signed_manifest.py` verifies the manifest's Ed25519 signature before installing it.
   The public key is not shipped: it is located inside the user's installed launcher using
