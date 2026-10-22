@@ -10,7 +10,11 @@
 - Desktop notifications for fatal launch errors, game updates and natively fetched manifests.
 - Identified the root cause of the launcher's 5-second `error decoding response body` timeouts
   (Wine < 11.6 `SECBUFFER_MISSING` size bug, upstream commit `35b1e7eb`) and added
-  `tools/wine-schannel-repro/` to test any Proton build for it.
+  `tools/wine-schannel-repro/` to test any Proton build for it. GE-Proton11-11 is not affected.
+- Added `src/fetch_proton.sh`: downloads an official GE-Proton release from GitHub, verifies
+  its SHA-512 and archive paths, and installs it next to existing builds. The installer
+  offers it when no Proton is found (`LWCOMPAT_FETCH_PROTON=1|0`) and now also detects
+  `GE-Proton*` directories.
 - `uninstall.sh` now also removes `lwcompat-update` (it removed `lwcompat-overlay` twice).
 
 ## 0.3.0 - 2026-10-22

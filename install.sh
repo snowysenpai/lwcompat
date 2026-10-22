@@ -243,7 +243,7 @@ find_proton() {
         "$HOME/.local/share/Steam/compatibilitytools.d" \
         "$HOME/.steam/root/compatibilitytools.d" \
         "$HOME/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d" \
-        -maxdepth 1 -mindepth 1 -type d -name 'Proton-GE*' -print 2>/dev/null \
+        -maxdepth 1 -mindepth 1 -type d \( -name 'Proton-GE*' -o -name 'GE-Proton*' \) -print 2>/dev/null \
         | sort -V | tail -n 1 || true)"
 
     [[ -n "$found" ]] || return 1
@@ -251,7 +251,26 @@ find_proton() {
 }
 
 UMU="$(find_umu)" || fail "Faugus/UMU launcher was not found. Set LWCOMPAT_UMU=/path/to/umu-run and retry."
-PROTON="$(find_proton)" || fail "GE-Proton was not found. Set LWCOMPAT_PROTON='/path/to/Proton-GE' and retry."
+# No Proton found: offer the official GE-Proton release (downloaded from
+# GitHub and SHA-512 verified; LWCompat does not redistribute it).
+fetch_proton() {
+    local choice="${LWCOMPAT_FETCH_PROTON:-ask}"
+
+    if [[ "$choice" == "ask" ]]; then
+        # stdout is captured by $(...); prompt on stderr.
+        [[ -t 0 && -t 2 ]] || return 1
+        read -r -p "GE-Proton was not found. Download the latest official release (~600 MB)? [Y/n] " choice
+        choice="${choice:-y}"
+    fi
+
+    case "$choice" in
+        1|y|Y|yes|YES|Yes) "$ROOT_DIR/src/fetch_proton.sh" | tail -n 1 ;;
+        *) return 1 ;;
+    esac
+}
+
+PROTON="$(find_proton || fetch_proton)" ||
+    fail "GE-Proton was not found. Set LWCOMPAT_PROTON='/path/to/Proton-GE', set LWCOMPAT_FETCH_PROTON=1, or run src/fetch_proton.sh and retry."
 
 BOOTSTRAP_PREFIX="${LWCOMPAT_PREFIX:-$HOME/Games/LastWar}"
 BOOTSTRAP_GAME_DIR="$BOOTSTRAP_PREFIX/drive_c/users/steamuser/AppData/Local/FunFly/Last War-Survival Game"
@@ -329,6 +348,7 @@ install -m 0755 "$ROOT_DIR/src/update.sh" "$APP_DIR/update.sh"
 install -m 0755 "$ROOT_DIR/src/fetch_signed_manifest.py" "$APP_DIR/fetch_signed_manifest.py"
 install -m 0755 "$ROOT_DIR/src/network_feed.py" "$APP_DIR/network_feed.py"
 install -m 0755 "$ROOT_DIR/src/doctor.sh" "$APP_DIR/doctor.sh"
+install -m 0755 "$ROOT_DIR/src/fetch_proton.sh" "$APP_DIR/fetch_proton.sh"
 install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
 install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 

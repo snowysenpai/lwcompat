@@ -73,7 +73,8 @@ Core requirements:
 
 - official Last War PC launcher installed in a Wine/Proton prefix;
 - Faugus Launcher / `umu-run`;
-- GE-Proton;
+- GE-Proton (GE-Proton11-8 or newer recommended; the installer can download the official
+  release for you, see below);
 - Python 3;
 - Bash;
 - `flock` from `util-linux`;
@@ -272,6 +273,22 @@ LWCOMPAT_PROTON="$HOME/path/to/Proton-GE" \
 ```
 
 The Wine prefix is derived automatically from the game directory when the game lives inside a standard `drive_c` tree.
+
+### GE-Proton
+
+LWCompat does not ship Proton. If none is found, the installer offers to download the
+latest official GE-Proton release from GitHub, verify it against the release's SHA-512 and
+unpack it into `~/.local/share/Steam/compatibilitytools.d`. To do this yourself, or to
+fetch a specific release:
+
+```bash
+src/fetch_proton.sh                  # latest
+src/fetch_proton.sh GE-Proton11-11   # specific tag
+```
+
+Builds on Wine older than 11.6 (including GE-Proton11-7 and earlier) have a schannel bug
+that makes the launcher time out on downloads; LWCompat works around it, but a newer
+build removes the cause. `tools/wine-schannel-repro/run.sh <proton dir>` checks a build.
 
 Fast Asset Cache can also be explicitly enabled or skipped during installation:
 
