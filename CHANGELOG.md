@@ -7,6 +7,7 @@
   The last 10 sessions are kept (`LWCOMPAT_KEEP_LOGS`); the old single log is archived once.
 - LWCompat, updater and manifest-fetch log lines carry a time stamp.
 - Added `lwcompat-doctor`, a read-only, shareable diagnostics report.
+- Desktop notifications for fatal launch errors, game updates and natively fetched manifests.
 - `uninstall.sh` now also removes `lwcompat-update` (it removed `lwcompat-overlay` twice).
 
 ## 0.3.0 - 2026-10-22

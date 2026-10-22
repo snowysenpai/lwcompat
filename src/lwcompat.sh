@@ -24,8 +24,24 @@ log() {
     printf '%(%H:%M:%S)T [LWCompat] %s\n' -1 "$*"
 }
 
+# Desktop notification for events the user would otherwise not see
+# (the GUI window or desktop entry has no terminal). Best effort.
+notify() {
+    local urgency="$1"
+    shift
+
+    command -v notify-send >/dev/null 2>&1 || return 0
+
+    local icon="$HOME/.local/share/icons/lastwar-lwcompat.png"
+    [[ -f "$icon" ]] || icon="applications-games"
+
+    notify-send -a LWCompat -u "$urgency" -i "$icon" \
+        "Last War (LWCompat)" "$*" >/dev/null 2>&1 || true
+}
+
 die() {
     printf '%(%H:%M:%S)T [LWCompat] ERROR: %s\n' -1 "$*" >&2
+    notify critical "$* Run lwcompat-doctor for details."
     exit 1
 }
 
@@ -497,6 +513,7 @@ for ATTEMPT in $(seq 1 "$MAX_LAUNCH_ATTEMPTS"); do
             fi
 
             log "Real update detected. Running updater..."
+            notify normal "Game update found. Updating, this can take a few minutes..."
 
             run_updater
             UPDATE_ALREADY_RAN=1
@@ -513,6 +530,7 @@ for ATTEMPT in $(seq 1 "$MAX_LAUNCH_ATTEMPTS"); do
 
             if (( MANIFEST_FETCHES <= 3 )) && fetch_signed_manifest; then
                 log "Signed manifest installed natively; retrying launcher..."
+                notify low "New game manifest fetched; continuing launch."
             else
                 log "Temporary Last War metadata timeout."
                 log "Retrying launcher directly..."
