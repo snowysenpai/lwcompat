@@ -43,6 +43,10 @@ struct LWCompat {
     overlay_error: bool,
     last_overlay_refresh: Instant,
 
+    profiles: Vec<String>,
+    active_profile: Option<String>,
+    profile_error: Option<String>,
+
     show_settings: bool,
 
     logo: Option<egui::TextureHandle>,
@@ -76,6 +80,10 @@ impl LWCompat {
             overlay_error: false,
             last_overlay_refresh:
                 Instant::now() - Duration::from_secs(5),
+
+            profiles: Vec::new(),
+            active_profile: None,
+            profile_error: None,
 
             show_settings: false,
 
@@ -114,6 +122,63 @@ impl LWCompat {
             Self::app_dir()?
                 .join("overlay_ctl.sh"),
         )
+    }
+
+    fn profiles_script() -> Option<PathBuf> {
+        Some(Self::app_dir()?.join("profiles.py"))
+    }
+
+    /// Saved game logins from `lwcompat-profile list` ("* " marks the active one).
+    fn refresh_profiles(&mut self) {
+        let Some(script) = Self::profiles_script().filter(|p| p.exists()) else {
+            self.profiles.clear();
+            self.active_profile = None;
+            return;
+        };
+
+        let Ok(output) = Command::new("python3").arg("-I").arg(script).arg("list").output() else {
+            return;
+        };
+
+        let text = String::from_utf8_lossy(&output.stdout);
+        self.profiles.clear();
+        self.active_profile = None;
+
+        for line in text.lines() {
+            if let Some(name) = line.strip_prefix("* ") {
+                self.active_profile = Some(name.to_owned());
+                self.profiles.push(name.to_owned());
+            } else if let Some(name) = line.strip_prefix("  ") {
+                self.profiles.push(name.to_owned());
+            }
+        }
+    }
+
+    fn use_profile(&mut self, name: &str) {
+        if self.running {
+            return;
+        }
+
+        let Some(script) = Self::profiles_script() else {
+            return;
+        };
+
+        match Command::new("python3").arg("-I").arg(script).arg("use").arg(name).output() {
+            Ok(output) if output.status.success() => self.profile_error = None,
+            Ok(output) => {
+                let err = String::from_utf8_lossy(&output.stderr);
+                self.profile_error = Some(
+                    err.lines()
+                        .last()
+                        .unwrap_or("profile switch failed")
+                        .trim_start_matches("[LWCompat profile] ERROR: ")
+                        .to_owned(),
+                );
+            }
+            Err(_) => self.profile_error = Some("profile switch failed".into()),
+        }
+
+        self.refresh_profiles();
     }
 
     fn game_dir() -> Option<PathBuf> {
@@ -405,6 +470,7 @@ impl LWCompat {
             >= Duration::from_secs(2)
         {
             self.refresh_overlays();
+            self.refresh_profiles();
         }
 
         self.last_refresh = Instant::now();
@@ -1299,6 +1365,46 @@ impl eframe::App for LWCompat {
                                 .clicked()
                             {
                                 self.launch();
+                            }
+
+                            // Saved logins (lwcompat-profile); shown once one exists.
+                            if !self.profiles.is_empty() {
+                                ui.add_space(10.0);
+
+                                let mut chosen: Option<String> = None;
+
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        egui::RichText::new("ACCOUNT")
+                                            .size(10.0)
+                                            .strong()
+                                            .color(egui::Color32::GRAY),
+                                    );
+
+                                    ui.add_enabled_ui(enabled, |ui| {
+                                        egui::ComboBox::from_id_salt("lwcompat_profile")
+                                            .selected_text(
+                                                self.active_profile.as_deref().unwrap_or("—"),
+                                            )
+                                            .width(150.0)
+                                            .show_ui(ui, |ui| {
+                                                for name in &self.profiles {
+                                                    let active = self.active_profile.as_deref() == Some(name.as_str());
+                                                    if ui.selectable_label(active, name).clicked() && !active {
+                                                        chosen = Some(name.clone());
+                                                    }
+                                                }
+                                            });
+                                    });
+
+                                    if let Some(err) = &self.profile_error {
+                                        ui.label(egui::RichText::new(err).size(9.5).color(RED));
+                                    }
+                                });
+
+                                if let Some(name) = chosen {
+                                    self.use_profile(&name);
+                                }
                             }
                         },
                     );

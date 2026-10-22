@@ -203,6 +203,24 @@ If the layer files are missing or invalid, LWCompat logs
 `Custom Vulkan HUD: UNAVAILABLE` and starts the game without it. An existing checkout
 without the submodule can fetch it with `git submodule update --init`.
 
+## Multiple accounts
+
+The game rate-limits e-mail login codes. `lwcompat-profile` saves the current login and
+restores it later without a code; it also remembers the selected character, so several
+characters of one e-mail can be separate profiles. With the game closed:
+
+```bash
+lwcompat-profile save main      # store the account/character you are logged in with
+lwcompat-profile use alt        # switch (the active profile is saved first)
+lwcompat-profile list
+```
+
+The GUI shows the saved profiles in an **ACCOUNT** menu next to PLAY. Only the few
+values that hold the login are swapped; game files, Fast Asset Cache and the device identity
+are shared, and only one client runs at a time. Profiles contain session tokens: they are
+stored with mode 0600 under `~/.local/share/lwcompat/profiles/` and never printed. A profile
+unused for a long time may ask for a code once; log in and `save` it again.
+
 ## Live and Developer builds
 
 LWCompat keeps normal user-facing builds separate from diagnostic developer builds.

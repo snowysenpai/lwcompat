@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- GUI: **ACCOUNT** menu next to PLAY for saved `lwcompat-profile` logins. Verified in game:
+  two e-mails and two characters of one e-mail switch without login codes, including a
+  profile whose token predates the last login.
 - Added `lwcompat-profile` (save/use/list/delete) to switch between saved game logins
   without e-mail codes. A profile is a copy of the few PlayerPrefs that hold the login;
   game files, Fast Asset Cache and the device identity stay shared. Profiles are stored
