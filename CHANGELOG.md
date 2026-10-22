@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Updates no longer launch the game twice: the updater's final resource sync runs without
+  the relay, and when it starts the game LWCompat keeps that session instead of killing it
+  and relaunching (`LWCOMPAT_UPDATE_RELAY=1` restores the old behaviour). Manual
+  `lwcompat-update` runs are unchanged.
+- Added `tests/test_supervisor.sh`: the real `lwcompat.sh` loop against stub launcher,
+  updater and manifest fetcher in a private PID namespace.
 - Removed the unused proxy launch mode from `lwcompat.sh` (normal launches have been direct
   since the updater got its own `CONNECT` relay).
 - The GUI no longer shows the stale `proxy.log` from the old 18080/18081 bridge, and log

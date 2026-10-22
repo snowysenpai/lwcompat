@@ -43,8 +43,11 @@ Needed because Wine before 11.6 stalls on this download (see
 
 Updater for real game updates: acquires the current signed manifest through the launcher
 via the `CONNECT` relay (`connect_proxy.py`, `127.0.0.1:18083`), installs changed client
-files natively with `bootstrap_client.py`, then lets the launcher sync resources. With the
-Cache-level Fast Asset Cache it runs with the cache active.
+files natively with `bootstrap_client.py`, then lets the launcher sync resources without
+any proxy. When `lwcompat.sh` runs it (`LWCOMPAT_UPDATE_HANDOFF=1`) and the launcher starts
+the game at the end of that sync, the game is kept and `update.sh` exits with 10 instead of
+killing it for a second launch. `LWCOMPAT_UPDATE_RELAY=1` restores the relayed resource
+sync. With the Cache-level Fast Asset Cache it runs with the cache active.
 
 ### `bootstrap.sh` / `bundle_proxy.py`
 

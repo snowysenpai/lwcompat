@@ -77,11 +77,21 @@ stop_prefix() {
     sleep 1
 }
 
+# Runs update.sh. Returns 0 when the update finished, or 10 when the
+# updater's final resource sync already started the game cleanly (it is
+# handed over instead of being killed and launched a second time).
 run_updater() {
     log "Update/resource mismatch detected."
     log "Starting automatic LWCompat updater..."
 
     stop_prefix
+
+    local keep_env=()
+
+    # Keep the custom HUD layer for a game the updater hands over.
+    if [[ -z "${HUD_FEED_PID:-}" ]]; then
+        keep_env=(-u VK_LAYER_PATH -u VK_INSTANCE_LAYERS)
+    fi
 
     env \
         -u HTTPS_PROXY \
@@ -90,20 +100,28 @@ run_updater() {
         -u http_proxy \
         -u ALL_PROXY \
         -u all_proxy \
-        -u VK_LAYER_PATH \
-        -u VK_INSTANCE_LAYERS \
+        "${keep_env[@]}" \
         -u MANGOHUD \
         -u MANGOHUD_CONFIG \
         -u MANGOHUD_CONFIGFILE \
+        LWCOMPAT_UPDATE_HANDOFF=1 \
         "$UPDATE"
 
     local rc=$?
 
-    if (( rc != 0 )); then
-        die "Automatic updater failed with exit code $rc."
-    fi
-
-    log "Automatic update completed."
+    case "$rc" in
+        0)
+            log "Automatic update completed."
+            return 0
+            ;;
+        10)
+            log "Automatic update completed; game already started."
+            return 10
+            ;;
+        *)
+            die "Automatic updater failed with exit code $rc."
+            ;;
+    esac
 }
 
 export WINEPREFIX="$PREFIX"
@@ -421,11 +439,17 @@ for ATTEMPT in $(seq 1 "$MAX_LAUNCH_ATTEMPTS"); do
             log "Real update detected. Running updater..."
             notify normal "Game update found. Updating, this can take a few minutes..."
 
-            run_updater
             UPDATE_ALREADY_RAN=1
 
-            log "Updater finished; returning to direct launcher."
-            sleep 1
+            if run_updater; then
+                log "Updater finished; returning to direct launcher."
+                sleep 1
+            else
+                # rc 10: the game is already running from the updater.
+                UMU_PID=""
+                LAUNCH_OK=1
+                break
+            fi
             ;;
 
         21)
@@ -489,8 +513,12 @@ unset HTTP_PROXY http_proxy
 unset ALL_PROXY all_proxy
 unset NO_PROXY no_proxy
 
-wait "$UMU_PID"
-EXIT_CODE=$?
+EXIT_CODE=0
+
+if [[ -n "${UMU_PID:-}" ]]; then
+    wait "$UMU_PID"
+    EXIT_CODE=$?
+fi
 
 while pgrep -x 'LastWar\.exe|LastWarLauncher' >/dev/null 2>&1
 do

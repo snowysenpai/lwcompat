@@ -47,6 +47,12 @@ UMU_PID=""
 FAST_CACHE_WAS_ACTIVE=0
 FAST_CACHE_WAS_ENABLED=0
 UPDATE_SUCCEEDED=0
+# Set by lwcompat.sh: when the final resource sync starts the game with a
+# clean (proxy-free) environment, keep it running and exit with
+# EXIT_GAME_STARTED instead of killing it for a second launch.
+HANDOFF="${LWCOMPAT_UPDATE_HANDOFF:-0}"
+EXIT_GAME_STARTED=10
+GAME_HANDED_OFF=0
 
 
 log() {
@@ -116,7 +122,9 @@ restore_fast_cache() {
 }
 
 cleanup() {
-    stop_prefix
+    if (( GAME_HANDED_OFF == 0 )); then
+        stop_prefix
+    fi
     stop_pid "$CONNECT_PID"
     CONNECT_PID=""
 
@@ -165,7 +173,22 @@ start_connect_proxy() {
 }
 
 
+# Usage: launch_update_launcher [relay|direct]
+# "direct" gives the launcher (and a game it starts) the same proxy-free
+# environment as a normal launch.
 launch_update_launcher() {
+    local mode="${1:-relay}"
+    local proxy_env=(
+        HTTPS_PROXY="http://127.0.0.1:18083"
+        https_proxy="http://127.0.0.1:18083"
+        NO_PROXY="127.0.0.1,localhost"
+        no_proxy="127.0.0.1,localhost"
+    )
+
+    if [[ "$mode" == "direct" ]]; then
+        proxy_env=(-u HTTPS_PROXY -u https_proxy -u NO_PROXY -u no_proxy)
+    fi
+
     : > "$UMU_LOG"
 
     env \
@@ -173,10 +196,7 @@ launch_update_launcher() {
         -u http_proxy \
         -u ALL_PROXY \
         -u all_proxy \
-        HTTPS_PROXY="http://127.0.0.1:18083" \
-        https_proxy="http://127.0.0.1:18083" \
-        NO_PROXY="127.0.0.1,localhost" \
-        no_proxy="127.0.0.1,localhost" \
+        "${proxy_env[@]}" \
         WINEPREFIX="$PREFIX" \
         PROTONPATH="$PROTON" \
         GAMEID="umu-default" \
@@ -493,14 +513,19 @@ sync_resources_with_retries() {
 
     disable_fast_cache
 
+    # Native phases already handled the manifest and client files; the
+    # launcher only syncs resources here, so it can run without the relay.
+    local mode=direct
+    [[ "${LWCOMPAT_UPDATE_RELAY:-0}" == "1" ]] && mode=relay
+
     for attempt in $(seq 1 "$max_attempts"); do
-        log "Resource sync attempt $attempt/$max_attempts"
+        log "Resource sync attempt $attempt/$max_attempts ($mode)"
 
         stop_prefix
 
         : > "$LAUNCHER_LOG"
 
-        launch_update_launcher
+        launch_update_launcher "$mode"
 
         while true; do
             if grep -Fq \
@@ -508,6 +533,16 @@ sync_resources_with_retries() {
                 "$LAUNCHER_LOG" 2>/dev/null
             then
                 log "Resource sync completed."
+
+                # Keep the game when it was started cleanly and the cache
+                # does not need restoring (restore is refused while running).
+                if [[ "$HANDOFF" == "1" && "$mode" == "direct" ]] &&
+                   (( FAST_CACHE_WAS_ACTIVE == 0 ))
+                then
+                    GAME_HANDED_OFF=1
+                    log "Game started by the launcher; handing over to LWCompat."
+                    return 0
+                fi
 
                 stop_prefix
                 return 0
@@ -697,6 +732,13 @@ main() {
     restore_fast_cache
 
     log "Update complete."
+
+    if (( GAME_HANDED_OFF == 1 )); then
+        stop_pid "$CONNECT_PID"
+        CONNECT_PID=""
+        exit "$EXIT_GAME_STARTED"
+    fi
+
     log "Normal gameplay can now start with a clean network environment."
 }
 
