@@ -1134,6 +1134,15 @@ impl LWCompat {
     fn log_color(line: &str) -> egui::Color32 {
         let lower = line.to_ascii_lowercase();
 
+        // Expected Proton notices that look alarming but are harmless:
+        // no extra drive letter for games under /home, and ProtonFixes
+        // being disabled on purpose (PROTONFIXES_DISABLE=1).
+        if line.contains("unable to use parent for game drive")
+            || line.contains("Skipping fix execution")
+        {
+            return egui::Color32::from_rgb(110, 115, 130);
+        }
+
         if lower.contains("error")
             || lower.contains("failed")
         {
@@ -1249,9 +1258,11 @@ impl eframe::App for LWCompat {
                         ui.add_space(5.0);
 
                         ui.label(
-                            egui::RichText::new(
-                                "Dual bridge • GE-Proton • UMU"
-                            )
+                            egui::RichText::new(concat!(
+                                "v",
+                                env!("CARGO_PKG_VERSION"),
+                                " • GE-Proton • UMU"
+                            ))
                             .size(11.0)
                             .color(
                                 egui::Color32::from_rgb(
