@@ -328,6 +328,7 @@ install -m 0755 "$ROOT_DIR/src/bootstrap.sh" "$APP_DIR/bootstrap.sh"
 install -m 0755 "$ROOT_DIR/src/update.sh" "$APP_DIR/update.sh"
 install -m 0755 "$ROOT_DIR/src/fetch_signed_manifest.py" "$APP_DIR/fetch_signed_manifest.py"
 install -m 0755 "$ROOT_DIR/src/network_feed.py" "$APP_DIR/network_feed.py"
+install -m 0755 "$ROOT_DIR/src/doctor.sh" "$APP_DIR/doctor.sh"
 install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
 install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 
@@ -362,6 +363,7 @@ ln -sfn "$APP_DIR/start.sh" "$BIN_DIR/lwcompat"
 ln -sfn "$APP_DIR/fast_asset_cache_ctl.sh" "$BIN_DIR/lwcompat-fast-cache"
 ln -sfn "$APP_DIR/overlay_ctl.sh" "$BIN_DIR/lwcompat-overlay"
 ln -sfn "$APP_DIR/update.sh" "$BIN_DIR/lwcompat-update"
+ln -sfn "$APP_DIR/doctor.sh" "$BIN_DIR/lwcompat-doctor"
 
 install_gui() {
     local mode

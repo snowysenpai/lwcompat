@@ -554,6 +554,16 @@ A healthy launch reports:
 
 ## Troubleshooting
 
+Start with the read-only diagnostics report. It hides your home directory, so it can be
+shared as-is:
+
+```bash
+lwcompat-doctor            # add --offline to skip the CDN check
+```
+
+It shows versions and paths, local vs. remote manifest, a verdict for the last launcher
+run, Fast Asset Cache layout, overlay settings, a CDN check and the last session.
+
 ### `error decoding response body` / `operation timed out`
 
 Under Wine, the launcher's schannel TLS stack can stall on the final TLS record of a
