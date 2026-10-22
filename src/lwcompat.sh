@@ -5,10 +5,7 @@ APP_DIR="${LWCOMPAT_APP_DIR:-$HOME/.local/share/lwcompat}"
 CONFIG="$APP_DIR/config.sh"
 LOG_DIR="$APP_DIR/logs"
 UPDATE="$APP_DIR/update.sh"
-CONNECT_PROXY="$APP_DIR/connect_proxy.py"
 MANIFEST_FETCH="$APP_DIR/fetch_signed_manifest.py"
-CONNECT_LOG="$LOG_DIR/connect.log"
-CONNECT_PID=""
 
 HUD_DIR="$APP_DIR/hud"
 HUD_LAYER_NAME="VK_LAYER_LWCOMPAT_hud_spike"
@@ -221,69 +218,10 @@ unset HTTP_PROXY http_proxy
 unset ALL_PROXY all_proxy
 unset NO_PROXY no_proxy
 
-wait_connect_port() {
-    python3 - <<'PY2'
-import socket
-import time
-
-for _ in range(100):
-    try:
-        with socket.create_connection(
-            ("127.0.0.1", 18083),
-            timeout=0.2,
-        ):
-            raise SystemExit(0)
-    except OSError:
-        time.sleep(0.1)
-
-raise SystemExit(1)
-PY2
-}
-
-
+# The CONNECT relay belongs to update.sh; make sure none is left behind
+# (e.g. by an interrupted update) before the launcher runs without a proxy.
 stop_connect_proxy() {
-    if [[ -n "${CONNECT_PID:-}" ]] &&
-       kill -0 "$CONNECT_PID" 2>/dev/null
-    then
-        kill "$CONNECT_PID" 2>/dev/null || true
-
-        for _ in {1..30}; do
-            kill -0 "$CONNECT_PID" 2>/dev/null || break
-            sleep 0.1
-        done
-
-        kill -9 "$CONNECT_PID" 2>/dev/null || true
-    fi
-
-    CONNECT_PID=""
-
-    # Only kill LWCompat's installed launcher bridge.
     pkill -f "$APP_DIR/connect_proxy.py" 2>/dev/null || true
-}
-
-
-start_connect_proxy() {
-    stop_connect_proxy
-
-    [[ -f "$CONNECT_PROXY" ]] || {
-        log "Launcher network bridge missing: $CONNECT_PROXY"
-        return 1
-    }
-
-    : > "$CONNECT_LOG"
-
-    python3 "$CONNECT_PROXY" \
-        >>"$CONNECT_LOG" 2>&1 &
-
-    CONNECT_PID=$!
-
-    if ! wait_connect_port; then
-        tail -30 "$CONNECT_LOG" >&2 || true
-        stop_connect_proxy
-        return 1
-    fi
-
-    log "Launcher network bridge: 127.0.0.1:18083"
 }
 
 
@@ -362,42 +300,22 @@ trap runtime_cleanup EXIT INT TERM
 
 
 launch_clean() {
-    local mode="${1:-direct}"
-
     : > "$LAUNCHER_LOG"
 
-    if [[ "$mode" == "proxy" ]]; then
-        start_connect_proxy || return 40
+    stop_connect_proxy
 
-        log "Launching official launcher with network bridge..."
+    log "Launching official launcher directly..."
 
-        env \
-            -u HTTP_PROXY \
-            -u http_proxy \
-            -u ALL_PROXY \
-            -u all_proxy \
-            HTTPS_PROXY="http://127.0.0.1:18083" \
-            https_proxy="http://127.0.0.1:18083" \
-            NO_PROXY="127.0.0.1,localhost" \
-            no_proxy="127.0.0.1,localhost" \
-            python3 "$UMU" "$LAUNCHER" &
-
-    else
-        stop_connect_proxy
-
-        log "Launching official launcher directly..."
-
-        env \
-            -u HTTPS_PROXY \
-            -u https_proxy \
-            -u HTTP_PROXY \
-            -u http_proxy \
-            -u ALL_PROXY \
-            -u all_proxy \
-            -u NO_PROXY \
-            -u no_proxy \
-            python3 "$UMU" "$LAUNCHER" &
-    fi
+    env \
+        -u HTTPS_PROXY \
+        -u https_proxy \
+        -u HTTP_PROXY \
+        -u http_proxy \
+        -u ALL_PROXY \
+        -u all_proxy \
+        -u NO_PROXY \
+        -u no_proxy \
+        python3 "$UMU" "$LAUNCHER" &
 
     UMU_PID=$!
 
@@ -483,7 +401,7 @@ fi
 for ATTEMPT in $(seq 1 "$MAX_LAUNCH_ATTEMPTS"); do
     log "Launcher attempt $ATTEMPT/$MAX_LAUNCH_ATTEMPTS"
 
-    launch_clean "direct"
+    launch_clean
     RESULT=$?
 
     case "$RESULT" in

@@ -404,9 +404,6 @@ impl LWCompat {
         let lw =
             fs::read_to_string(dir.join("lwcompat.log")).unwrap_or_default();
 
-        let proxy =
-            fs::read_to_string(dir.join("proxy.log")).unwrap_or_default();
-
         let mut lines = Vec::new();
 
         if !lw.is_empty() {
@@ -415,16 +412,6 @@ impl LWCompat {
             );
 
             lines.extend(lw.lines().map(str::to_owned));
-        }
-
-        if !proxy.is_empty() {
-            lines.push(String::new());
-
-            lines.push(
-                "── NATIVE BRIDGE ───────────────────────────────────".into(),
-            );
-
-            lines.extend(proxy.lines().map(str::to_owned));
         }
 
         if lines.len() > 450 {
@@ -1151,17 +1138,22 @@ impl LWCompat {
             || lower.contains("failed")
         {
             RED
-        } else if line.contains("WARN") {
+        } else if line.contains("WARN")
+            || line.contains("Transient")
+            || line.contains("timeout")
+            || line.contains("stalled")
+            || line.contains("Retrying")
+        {
             ORANGE
-        } else if line.contains("[API]") {
-            BLUE
-        } else if line.contains("[CDN]") {
+        } else if line.contains("[LWCompat update]")
+            || line.contains("[LWCompat manifest]")
+        {
             PURPLE
-        } else if line.contains("HTTP 200")
-            || line.contains("READY")
-            || line.contains("18080 OK")
-            || line.contains("18081 OK")
+        } else if line.contains("Launcher attempt") {
+            BLUE
+        } else if line.contains("Game launch authorized")
             || line.contains("Fast Asset Cache: ACTIVE")
+            || line.contains("Update complete")
         {
             GREEN
         } else if line.starts_with("──") {

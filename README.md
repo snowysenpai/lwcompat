@@ -12,23 +12,25 @@ It also includes optional performance optimizations specifically discovered whil
 
 LWCompat currently:
 
-- launches the existing official `LastWarLauncher.exe` through Faugus/UMU + GE-Proton;
-- patches only two launcher manifest values at launch time;
-- starts a local native bridge on `127.0.0.1`;
-- proxies bundle/CDN traffic through port `18080`;
-- proxies version/table API traffic through port `18081`;
-- keeps TLS handling on the Linux side instead of inside the Windows launcher;
-- starts a fresh bridge for every game session;
-- prevents accidental double-launches;
+- launches the existing official `LastWarLauncher.exe` through Faugus/UMU + GE-Proton,
+  leaving all update, verification and launch decisions to the official launcher;
+- watches `Launcher.log` and reacts to what the launcher reports: retries transient network
+  timeouts, runs the updater for real updates, and fetches the signed remote manifest natively
+  when it stalls inside Wine (see Troubleshooting);
+- runs updates through a local HTTPS `CONNECT` relay on `127.0.0.1:18083` (updater only;
+  gameplay never uses a proxy) and downloads changed client files natively;
+- bootstraps a fresh installation from the official `LastWarDownloader.exe` when none exists;
+- downloads official GE-Proton releases on request and never redistributes them;
+- prevents accidental double-launches and keeps one time-stamped log per session;
 - configures persistent DXVK and driver shader caches;
 - supports an optional casefold-backed **Fast Asset Cache**;
-- creates a desktop menu entry;
-- attempts to extract the official icon locally from installed game files;
-- includes a native Rust GUI frontend while keeping the working Bash/Python compatibility engine intact;
-- provides GUI controls for Fast Asset Cache, FPS counter and DXVK HUD;
-- supports separate Live and Developer GUI builds.
+- includes an optional custom Vulkan HUD and a read-only `lwcompat-doctor` report;
+- creates a desktop menu entry and extracts the official icon locally from installed game files;
+- includes a native Rust GUI frontend for launching, logs, Fast Asset Cache, FPS counter and
+  DXVK HUD, with separate Live and Developer builds.
 
-It **does not** redistribute Last War binaries, assets, Proton builds, Faugus components, or proprietary game artwork.
+It **does not** redistribute Last War binaries, assets, Proton builds, Faugus components, or
+proprietary game artwork, and it does not modify the official launcher or its signed manifest.
 
 ## Current architecture
 
@@ -36,34 +38,30 @@ It **does not** redistribute Last War binaries, assets, Proton builds, Faugus co
 Last War (LWCompat)
         |
         v
-lwcompat-gui
-        |
-        v
-start.sh
-        |
-        v
-lwcompat.sh
-        |
-        +--> patch manifest.json
-        |      bundle_url     -> http://127.0.0.1:18080/
-        |      bundle_ver_url -> http://127.0.0.1:18081
-        |
-        +--> bundle_proxy.py
-        |      127.0.0.1:18080 -> https://lastwar-cdn.akamaized.net/hotupdate
-        |      127.0.0.1:18081 -> https://lastwar-serverlist-cf.lastwarapp.net
-        |
-        +--> performance/cache configuration
-        |
-        +--> UMU / GE-Proton
-               |
-               v
-        LastWarLauncher.exe
-               |
-               v
-            LastWar.exe
+lwcompat-gui ──> start.sh  (lock, per-session log)
+                    |
+                    v
+                lwcompat.sh
+                    |
+                    +--> shader caches, overlays, optional custom HUD
+                    |
+                    +--> UMU / GE-Proton ──> LastWarLauncher.exe ──> LastWar.exe
+                    |          (direct network, no proxy)
+                    |
+                    +--> Launcher.log state (launcher_log.sh)
+                           started         -> wait for the game session to end
+                           manifest-stall  -> fetch_signed_manifest.py, retry
+                           transient       -> retry
+                           update          -> update.sh
+                                                |  CONNECT relay 127.0.0.1:18083
+                                                |  bootstrap_client.py (native file sync)
+                                                v
+                                              retry launcher
 ```
 
-Both native bridge listeners bind to `127.0.0.1` only.
+`bootstrap.sh` (first install only) additionally runs `bundle_proxy.py` on
+`127.0.0.1:18080/18081` while the official downloader fetches the game. All local
+listeners bind to `127.0.0.1` only.
 
 ## Requirements
 
@@ -504,19 +502,32 @@ The normal per-user installation lives under:
 
 ```text
 ~/.local/share/lwcompat/
-├── bundle_proxy.py
-├── config.sh
-├── lwcompat.sh
-├── start.sh
-├── lwcompat-gui
+├── VERSION
+├── config.sh                   detected paths (generated)
+├── start.sh                    entry point: lock + per-session log
+├── lwcompat.sh                 session supervisor
+├── launcher_log.sh             Launcher.log classification
+├── fetch_signed_manifest.py    native manifest fetch (Wine < 11.6 workaround)
+├── update.sh                   updater
+├── connect_proxy.py            CONNECT relay for the updater (127.0.0.1:18083)
+├── bootstrap.sh                first install from the official downloader
+├── bootstrap_client.py         native client file sync
+├── bundle_proxy.py             bootstrap-only bridge (127.0.0.1:18080/18081)
+├── doctor.sh                   lwcompat-doctor
+├── fetch_proton.sh             official GE-Proton download + SHA-512 check
 ├── overlay_ctl.sh
+├── network_feed.py             custom HUD network feed
+├── hud/                        custom Vulkan HUD layer (optional)
+├── lwcompat-gui
 ├── fast_asset_cache.sh
 ├── fast_asset_cache_ctl.sh
 ├── setup_fast_asset_cache.sh
 ├── lwcompat-fast-asset-cache.service
-├── fast-cache/
+├── fast-cache/                 ext4 casefold image
 ├── backups/
 └── logs/
+    ├── lwcompat.log -> sessions/<newest>
+    └── sessions/
 ```
 
 User commands:
@@ -526,6 +537,8 @@ User commands:
 ~/.local/bin/lwcompat-gui
 ~/.local/bin/lwcompat-overlay
 ~/.local/bin/lwcompat-fast-cache
+~/.local/bin/lwcompat-update
+~/.local/bin/lwcompat-doctor
 ```
 
 Desktop integration:

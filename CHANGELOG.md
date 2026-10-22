@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Removed the unused proxy launch mode from `lwcompat.sh` (normal launches have been direct
+  since the updater got its own `CONNECT` relay).
+- The GUI no longer shows the stale `proxy.log` from the old 18080/18081 bridge, and log
+  colours follow current messages (retries, updater, game start).
+- README, `docs/ARCHITECTURE.md` and `docs/TROUBLESHOOTING.md` describe the current design;
+  they still documented manifest patching, which the signed manifest no longer allows.
 - Added tests (`tests/run.sh`, also run in GitHub Actions): launcher log classification on
   real `Launcher.log` samples, native manifest fetch against a local server with a synthetic
   manifest, Fast Asset Cache helper/ctl in a private mount namespace, and session logs.
