@@ -566,12 +566,21 @@ run, Fast Asset Cache layout, overlay settings, a CDN check and the last session
 
 ### `error decoding response body` / `operation timed out`
 
-Under Wine, the launcher's schannel TLS stack can stall on the final TLS record of a
-response body even though the server sent it completely; the launcher gives up after
-5 seconds. Most downloads succeed on retry. The signed remote manifest fails every time,
-so when `Launcher.log` shows `Failed to load remote manifest` LWCompat fetches
+Root cause: Wine before 11.6 reports the full TLS record size instead of the missing byte
+count in the second `SECBUFFER_MISSING` buffer of `DecryptMessage` (fixed upstream in
+Wine commit `35b1e7eb`). The launcher's Rust TLS stack trusts that value, so when a
+response ends inside a TLS record that was split across two reads it waits for bytes that
+never arrive and gives up after 5 seconds. Most downloads succeed on retry; the signed
+remote manifest fails every time, so when `Launcher.log` shows
+`Failed to load remote manifest` LWCompat fetches
 `manifest/<channel>/manifests/<version>.json` and `.sig` natively and installs them
 (previous manifest backed up under `~/.local/share/lwcompat/backups/manifests/`).
+
+To check whether a Proton build is affected (uses a throwaway prefix):
+
+```bash
+tools/wine-schannel-repro/run.sh "$HOME/.local/share/Steam/compatibilitytools.d/GE-ProtonXX-YY"
+```
 
 Check what happened:
 

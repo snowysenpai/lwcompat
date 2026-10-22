@@ -8,6 +8,9 @@
 - LWCompat, updater and manifest-fetch log lines carry a time stamp.
 - Added `lwcompat-doctor`, a read-only, shareable diagnostics report.
 - Desktop notifications for fatal launch errors, game updates and natively fetched manifests.
+- Identified the root cause of the launcher's 5-second `error decoding response body` timeouts
+  (Wine < 11.6 `SECBUFFER_MISSING` size bug, upstream commit `35b1e7eb`) and added
+  `tools/wine-schannel-repro/` to test any Proton build for it.
 - `uninstall.sh` now also removes `lwcompat-update` (it removed `lwcompat-overlay` twice).
 
 ## 0.3.0 - 2026-10-22
