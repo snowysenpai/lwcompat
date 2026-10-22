@@ -46,6 +46,7 @@ struct LWCompat {
     profiles: Vec<String>,
     active_profile: Option<String>,
     profile_error: Option<String>,
+    profile_rename: Option<String>,
 
     show_settings: bool,
 
@@ -84,6 +85,7 @@ impl LWCompat {
             profiles: Vec::new(),
             active_profile: None,
             profile_error: None,
+            profile_rename: None,
 
             show_settings: false,
 
@@ -176,6 +178,29 @@ impl LWCompat {
                 );
             }
             Err(_) => self.profile_error = Some("profile switch failed".into()),
+        }
+
+        self.refresh_profiles();
+    }
+
+    fn rename_profile(&mut self, old: &str, new: &str) {
+        let Some(script) = Self::profiles_script() else {
+            return;
+        };
+
+        match Command::new("python3").arg("-I").arg(script).arg("rename").arg(old).arg(new).output() {
+            Ok(output) if output.status.success() => self.profile_error = None,
+            Ok(output) => {
+                let err = String::from_utf8_lossy(&output.stderr);
+                self.profile_error = Some(
+                    err.lines()
+                        .last()
+                        .unwrap_or("rename failed")
+                        .trim_start_matches("[LWCompat profile] ERROR: ")
+                        .to_owned(),
+                );
+            }
+            Err(_) => self.profile_error = Some("rename failed".into()),
         }
 
         self.refresh_profiles();
@@ -1381,6 +1406,36 @@ impl eframe::App for LWCompat {
                                             .color(egui::Color32::GRAY),
                                     );
 
+                                    let mut rename_to: Option<String> = None;
+
+                                    if let Some(buffer) = self.profile_rename.as_mut() {
+                                        // Inline rename of the active profile.
+                                        ui.horizontal(|ui| {
+                                            let response = ui.add(
+                                                egui::TextEdit::singleline(buffer).desired_width(118.0),
+                                            );
+                                            let enter = response.lost_focus()
+                                                && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                                            if ui.small_button("Save").clicked() || enter {
+                                                rename_to = Some(buffer.trim().to_owned());
+                                            }
+                                            if ui.small_button("Cancel").clicked() {
+                                                rename_to = Some(String::new());
+                                            }
+                                        });
+                                    }
+
+                                    if let Some(new_name) = rename_to {
+                                        if let Some(old) = self.active_profile.clone() {
+                                            if !new_name.is_empty() && new_name != old {
+                                                self.rename_profile(&old, &new_name);
+                                            }
+                                        }
+                                        self.profile_rename = None;
+                                    }
+
+                                    if self.profile_rename.is_none() {
+                                    ui.horizontal(|ui| {
                                     ui.add_enabled_ui(enabled, |ui| {
                                         egui::ComboBox::from_id_salt("lwcompat_profile")
                                             .selected_text(
@@ -1396,6 +1451,16 @@ impl eframe::App for LWCompat {
                                                 }
                                             });
                                     });
+
+                                    if ui
+                                        .add_enabled(self.active_profile.is_some(), egui::Button::new("Rename").small())
+                                        .on_hover_text("Rename this profile")
+                                        .clicked()
+                                    {
+                                        self.profile_rename = self.active_profile.clone();
+                                    }
+                                    });
+                                    }
 
                                     if let Some(err) = &self.profile_error {
                                         ui.label(egui::RichText::new(err).size(9.5).color(RED));

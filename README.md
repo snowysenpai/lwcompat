@@ -213,9 +213,10 @@ characters of one e-mail can be separate profiles. With the game closed:
 lwcompat-profile save main      # store the account/character you are logged in with
 lwcompat-profile use alt        # switch (the active profile is saved first)
 lwcompat-profile list
+lwcompat-profile rename alt farm1
 ```
 
-The GUI shows the saved profiles in an **ACCOUNT** menu next to PLAY. Only the few
+The GUI shows the saved profiles in an **ACCOUNT** menu next to PLAY, with **Rename** for the selected one. Only the few
 values that hold the login are swapped; game files, Fast Asset Cache and the device identity
 are shared, and only one client runs at a time. Profiles contain session tokens: they are
 stored with mode 0600 under `~/.local/share/lwcompat/profiles/` and never printed. A profile

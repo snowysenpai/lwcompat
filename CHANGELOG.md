@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `lwcompat-profile rename OLD NEW` and a **Rename** button in the GUI account menu.
 - GUI: **ACCOUNT** menu next to PLAY for saved `lwcompat-profile` logins. Verified in game:
   two e-mails and two characters of one e-mail switch without login codes, including a
   profile whose token predates the last login.

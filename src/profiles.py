@@ -10,6 +10,7 @@ so switching looks like the game's own "remember me" login.
     lwcompat-profile list
     lwcompat-profile save NAME     store the current login as NAME
     lwcompat-profile use NAME      save the active profile, then load NAME
+    lwcompat-profile rename OLD NEW
     lwcompat-profile delete NAME
 
 Profiles hold session tokens (as sensitive as a password): they are stored
@@ -207,6 +208,9 @@ def main():
     sub.add_parser("list")
     for cmd in ("save", "use", "delete"):
         sub.add_parser(cmd).add_argument("name")
+    rename = sub.add_parser("rename")
+    rename.add_argument("old")
+    rename.add_argument("new")
     args = parser.parse_args()
 
     if args.cmd == "list":
@@ -216,6 +220,18 @@ def main():
             log("no profiles yet; log in with an account and run: lwcompat-profile save NAME")
         for name in names:
             print(("* " if name == active else "  ") + name)
+        return
+
+    if args.cmd == "rename":
+        source, target = profile_path(args.old), profile_path(args.new)
+        if not source.is_file():
+            die(f"no profile '{args.old}'")
+        if target.exists():
+            die(f"a profile named '{args.new}' already exists")
+        source.rename(target)
+        if active_name() == args.old:
+            write_private(PROFILE_DIR / "active", args.new + "\n")
+        log(f"renamed '{args.old}' to '{args.new}'")
         return
 
     if args.cmd == "delete":

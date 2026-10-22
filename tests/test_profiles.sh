@@ -64,6 +64,13 @@ assert_eq a9 "$(login_of)" "alpha's refreshed token was saved on switch"
 [[ "$(stat -c %a "$LWCOMPAT_PROFILE_DIR/alpha.reglines")" == 600 ]] && pass "profile files are 0600" || fail "profile mode"
 ls "$T/app/backups/profiles"/user.reg.* >/dev/null 2>&1 && pass "user.reg backed up before switching" || fail "backup"
 prof list | grep -q '^\* alpha$' && pass "list marks the active profile" || fail "list"
+prof rename alpha main >/dev/null
+prof list | grep -q '^\* main$' && pass "rename keeps the active marker" || fail "rename active"
+[[ -f "$LWCOMPAT_PROFILE_DIR/main.reglines" && ! -e "$LWCOMPAT_PROFILE_DIR/alpha.reglines" ]] && pass "rename moves the profile" || fail "rename file"
+prof rename beta main >/dev/null 2>&1 && fail "rename overwrote an existing profile" || pass "rename refuses to overwrite"
+prof rename main 'x y' >/dev/null 2>&1 && fail "rename accepted an unsafe name" || pass "rename rejects unsafe names"
+prof use main >/dev/null && assert_eq a9 "$(login_of)" "renamed profile still switches"
+
 prof save 'bad/name' >/dev/null 2>&1 && fail "unsafe profile name accepted" || pass "unsafe profile name rejected"
 
 printf '[Software\\\\FunFly\\\\Last War-Survival Game] 1\n"Other_h1"=dword:00000001\n\n' > "$REG"
