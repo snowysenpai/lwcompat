@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Player names using Unified Canadian Aboriginal Syllabics (e.g. `ᘮ`) showed as boxes:
+  Windows renders them with Gadugi/Euphemia, which the Proton prefix lacks. Before each
+  launch `prefix_fonts.sh` copies the host's Noto Sans Canadian Aboriginal into the prefix
+  and registers it (no-op once done; LWCompat ships no fonts).
+- `lwcompat-overlay` keeps every setting when one changes (toggling FPS/DXVK HUD used to
+  drop the custom HUD setting) and gained `custom` for the LWCompat Vulkan HUD.
+
 ## 0.4.0 - 2026-10-22
 
 - `fetch_signed_manifest.py` verifies the manifest's Ed25519 signature before installing it.

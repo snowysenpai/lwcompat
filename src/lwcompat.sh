@@ -416,6 +416,11 @@ else
     log "Custom Vulkan HUD: OFF"
 fi
 
+# Host fonts for scripts the prefix lacks (no-op once installed).
+if [[ -x "$APP_DIR/prefix_fonts.sh" ]]; then
+    "$APP_DIR/prefix_fonts.sh" "$PREFIX" "$PROTON/files/bin"
+fi
+
 for ATTEMPT in $(seq 1 "$MAX_LAUNCH_ATTEMPTS"); do
     log "Launcher attempt $ATTEMPT/$MAX_LAUNCH_ATTEMPTS"
 

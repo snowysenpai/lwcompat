@@ -619,6 +619,13 @@ grep -E 'Remote manifest|Failed to load|LWCompat manifest' \
   ~/.local/share/lwcompat/logs/lwcompat.log | tail -n 20
 ```
 
+### Player names show boxes (□)
+
+The game's `Player.log` names the missing character
+(`The character with Unicode value \uXXXX was not found`). LWCompat copies host fonts for
+scripts the Proton prefix lacks before each launch (`src/prefix_fonts.sh`); for Canadian
+Aboriginal syllabics install the Noto font, e.g. `sudo dnf install google-noto-sans-canadian-aboriginal-vf-fonts`.
+
 ### Check Fast Asset Cache
 
 Run:

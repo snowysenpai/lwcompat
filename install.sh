@@ -350,6 +350,7 @@ install -m 0755 "$ROOT_DIR/src/fetch_signed_manifest.py" "$APP_DIR/fetch_signed_
 install -m 0755 "$ROOT_DIR/src/network_feed.py" "$APP_DIR/network_feed.py"
 install -m 0755 "$ROOT_DIR/src/doctor.sh" "$APP_DIR/doctor.sh"
 install -m 0755 "$ROOT_DIR/src/fetch_proton.sh" "$APP_DIR/fetch_proton.sh"
+install -m 0755 "$ROOT_DIR/src/prefix_fonts.sh" "$APP_DIR/prefix_fonts.sh"
 install -m 0755 "$ROOT_DIR/src/fast_asset_cache_ctl.sh" "$APP_DIR/fast_asset_cache_ctl.sh"
 install -m 0755 "$ROOT_DIR/src/overlay_ctl.sh" "$APP_DIR/overlay_ctl.sh"
 
